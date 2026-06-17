@@ -1,0 +1,23 @@
+settings:
+  output_resolution: 1080x1920  # O 1920x1080 para Youtube estándar
+  fps: 30
+  duration_per_scene: 4.0     # Duración media por escena
+  
+audio:
+  voice_gender: male          # Male, Female
+  pitch: 1.0
+  rate: 1.0
+  bgm_volume: 0.2             # Volumen fondo
+  audio_peak: 0.9             # Limitador de picos
+
+visuals:
+  zoom_effect: true
+  transition_duration: 0.3    # Fade en transiciones
+  subtitle_style: mrbeast     # mrbeast, tiktok, minimal
+  watermark_enabled: true
+  color_palette: "dark_cinematic"
+
+youtube:
+  category_id: "28"           # People & Blogs o Science
+  tags_per_video: ["ai", "psychology", "facts"]
+  language: "en"

@@ -1,6 +1,10 @@
 import os, asyncio, random, requests
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+import PIL.Image
+
+if not hasattr(PIL.Image, "ANTIALIAS"):
+    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
 from moviepy.editor import (
     ImageClip,

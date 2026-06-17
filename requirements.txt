@@ -1,4 +1,12 @@
 pip install -r requirements.txt
+moviepy==1.0.3
+Pillow==9.5.0
+edge-tts
+requests
+google-api-python-client
+google-auth
+numpy
+pillow
 sudo apt install ffmpeg libgl1-mesa-glx libsm6 libxext6  # Para MoviePy
 
 python main.py

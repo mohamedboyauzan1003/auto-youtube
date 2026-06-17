@@ -1,11 +1,11 @@
 import os, asyncio, random, requests, numpy as np, textwrap, json, time, wave, tempfile
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 import PIL.Image
 
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
-from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
+from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, VideoClip
 from moviepy.audio.AudioClip import CompositeAudioClip
 from edge_tts import Communicate
 from concurrent.futures import ThreadPoolExecutor
@@ -14,7 +14,7 @@ W, H = 1080, 1920
 FPS = 30
 
 # ═══════════════════════════════════════════════════════════════════
-#  GEMINI — Script Generator con retry automático
+#  SCRIPT — Gemini con retry + fallback robusto
 # ═══════════════════════════════════════════════════════════════════
 def generate_script_with_gemini():
     api_key = os.environ.get("GEMINI_API_KEY", "")
@@ -34,11 +34,6 @@ def generate_script_with_gemini():
         "the dark side of social media on your brain",
         "why your brain is wired for negativity",
         "psychological power moves used by leaders",
-        "why people stay in toxic relationships",
-        "how childhood trauma shapes adult behavior",
-        "dark secrets of the most persuasive people",
-        "why your brain craves drama and conflict",
-        "how dopamine is used to control you",
     ]
     topic = random.choice(topics)
     print(f"  Topic: {topic}")
@@ -136,41 +131,32 @@ def get_fallback_script():
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  IMAGE GENERATION — Pollinations HD + retry + parallel ready
+#  IMAGEN — Pollinations HD con retry
 # ═══════════════════════════════════════════════════════════════════
-
 ANIME_STYLES = [
     "makoto shinkai anime style",
     "studio mappa dark anime",
     "demon slayer anime art style",
     "attack on titan cinematic anime",
     "jujutsu kaisen dark aesthetic anime",
-    "dark fantasy anime art",
-    "cinematic anime illustration",
+    "dark fantasy anime illustration",
+    "cinematic anime art",
 ]
-
-def build_image_prompt(raw_prompt):
-    style = random.choice(ANIME_STYLES)
-    return (
-        f"{style}, {raw_prompt}, "
-        f"masterpiece, best quality, ultra detailed, 8k, "
-        f"dramatic cinematic lighting, deep shadows, "
-        f"no watermark, no text, no logo, no signature, "
-        f"vertical composition, portrait format"
-    )
 
 def generate_image(prompt, index):
     print(f"  Generating image {index+1}...")
-    full_prompt = build_image_prompt(prompt)
-
-    # 3 intentos con seeds distintas
+    style = random.choice(ANIME_STYLES)
+    full_prompt = (
+        f"{style}, {prompt}, "
+        f"masterpiece, best quality, ultra detailed, 8k, "
+        f"dramatic cinematic lighting, deep shadows, "
+        f"no watermark, no text, no logo, vertical composition"
+    )
     for attempt in range(3):
         path = try_pollinations(full_prompt, index, attempt)
         if path:
             return path
-        time.sleep(3)
-
-    # Fallback oscuro con degradado
+        time.sleep(4)
     return make_dark_gradient(index)
 
 
@@ -188,8 +174,7 @@ def try_pollinations(full_prompt, index, attempt=0):
             path = f"img_{index}.jpg"
             with open(path, "wb") as f:
                 f.write(r.content)
-            img = Image.open(path).convert("RGB")
-            img = img.resize((W, H), Image.LANCZOS)
+            img = Image.open(path).convert("RGB").resize((W, H), Image.LANCZOS)
             img = ImageEnhance.Contrast(img).enhance(1.25)
             img = ImageEnhance.Sharpness(img).enhance(1.4)
             img = ImageEnhance.Color(img).enhance(1.15)
@@ -206,12 +191,10 @@ def make_dark_gradient(index):
     draw = ImageDraw.Draw(img)
     for y in range(H):
         ratio = y / H
-        r = int(5 + 30 * ratio)
-        g = int(2 + 5 * ratio)
-        b = int(12 + 40 * ratio)
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
+        draw.line([(0, y), (W, y)], fill=(int(5+30*ratio), int(2+5*ratio), int(12+40*ratio)))
     path = f"img_{index}.jpg"
     img.save(path)
+    print(f"  Using dark gradient fallback for image {index+1}")
     return path
 
 
@@ -225,9 +208,8 @@ def add_vignette(img):
     steps = min(w, h) // 2
     for i in range(steps):
         alpha = int(255 * (i / steps) ** 0.5)
-        draw.ellipse([i, i, w - i, h - i], fill=alpha)
-    vignette = Image.composite(img, Image.new("RGB", (w, h), (0, 0, 0)), mask)
-    return vignette
+        draw.ellipse([i, i, w-i, h-i], fill=alpha)
+    return Image.composite(img, Image.new("RGB", (w, h), (0, 0, 0)), mask)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -239,134 +221,129 @@ def glitch_frame(img_array, intensity=3):
     for _ in range(intensity):
         y = random.randint(0, h - 10)
         shift = random.randint(-10, 10)
-        strip_h = random.randint(2, 8)
-        strip = img[y : y + strip_h, :].copy()
+        sh = random.randint(2, 8)
+        strip = img[y:y+sh, :].copy()
         if shift > 0 and shift < w:
-            img[y : y + strip_h, shift:] = strip[:, :-shift]
+            img[y:y+sh, shift:] = strip[:, :-shift]
         elif shift < 0 and -shift < w:
-            img[y : y + strip_h, :shift] = strip[:, -shift:]
-    shift = random.randint(1, 4)
-    img[:, :, 0] = np.roll(img[:, :, 0], shift, axis=1)
-    img[:, :, 2] = np.roll(img[:, :, 2], -shift, axis=1)
+            img[y:y+sh, :shift] = strip[:, -shift:]
+    s = random.randint(1, 4)
+    img[:,:,0] = np.roll(img[:,:,0], s, axis=1)
+    img[:,:,2] = np.roll(img[:,:,2], -s, axis=1)
     return img
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  TEXT RENDERER — texto arriba + branding mejorado
+#  FONTS
 # ═══════════════════════════════════════════════════════════════════
 def get_fonts():
-    font_paths = [
+    paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
     ]
-    for fp in font_paths:
+    for fp in paths:
         if os.path.exists(fp):
             try:
                 return (
-                    ImageFont.truetype(fp, 72),   # title big
-                    ImageFont.truetype(fp, 42),   # label
-                    ImageFont.truetype(fp, 36),   # small
+                    ImageFont.truetype(fp, 72),
+                    ImageFont.truetype(fp, 42),
                 )
             except:
                 pass
-    default = ImageFont.load_default()
-    return default, default, default
+    d = ImageFont.load_default()
+    return d, d
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  TEXT RENDERER — texto arriba, branding abajo
+# ═══════════════════════════════════════════════════════════════════
 def render_text_frame(base_arr, text, char_progress, frame_idx, scene_num, total_scenes):
-    img = Image.fromarray(base_arr).convert("RGBA")
+    img = Image.fromarray(base_arr.astype(np.uint8)).convert("RGBA")
     w, h = img.size
 
-    # ── Gradiente superior (para texto arriba) ──
-    grad_top = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    # Gradiente superior oscuro
+    grad_top = Image.new("RGBA", (w, h), (0,0,0,0))
     gd = ImageDraw.Draw(grad_top)
-    grad_h_top = int(h * 0.38)
-    for y in range(grad_h_top):
-        a = int(200 * (1 - y / grad_h_top) ** 1.2)
-        gd.line([(0, y), (w, y)], fill=(0, 0, 0, a))
+    gh = int(h * 0.40)
+    for y in range(gh):
+        a = int(195 * (1 - y/gh) ** 1.2)
+        gd.line([(0,y),(w,y)], fill=(0,0,0,a))
     img = Image.alpha_composite(img, grad_top)
 
-    # ── Gradiente inferior (branding) ──
-    grad_bot = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    # Gradiente inferior oscuro
+    grad_bot = Image.new("RGBA", (w, h), (0,0,0,0))
     gd2 = ImageDraw.Draw(grad_bot)
-    grad_h_bot = int(h * 0.22)
-    for y in range(h - grad_h_bot, h):
-        a = int(210 * ((y - (h - grad_h_bot)) / grad_h_bot) ** 1.1)
-        gd2.line([(0, y), (w, y)], fill=(0, 0, 0, a))
+    gbh = int(h * 0.20)
+    for y in range(h - gbh, h):
+        a = int(210 * ((y-(h-gbh))/gbh) ** 1.1)
+        gd2.line([(0,y),(w,y)], fill=(0,0,0,a))
     img = Image.alpha_composite(img, grad_bot)
 
     draw = ImageDraw.Draw(img)
-    font_big, font_label, font_small = get_fonts()
+    font_big, font_label = get_fonts()
 
-    # ── Barra roja superior ──
-    bar_top = 110
-    draw.rectangle([(60, bar_top), (w - 60, bar_top + 7)], fill=(220, 15, 15, 255))
+    # Barra roja superior
+    bar_top = 100
+    draw.rectangle([(60, bar_top), (w-60, bar_top+7)], fill=(220,15,15,255))
 
-    # ── Texto principal ARRIBA ──
+    # Texto arriba con typewriter
     partial = text[:char_progress]
     lines = textwrap.wrap(partial, width=16)
-    line_h = 88
-    text_start_y = bar_top + 28
+    line_h = 90
+    text_y = bar_top + 30
 
     for i, line in enumerate(lines):
-        bbox = draw.textbbox((0, 0), line, font=font_big)
-        tw = bbox[2] - bbox[0]
-        x = (w - tw) // 2
-        y = text_start_y + i * line_h
+        bbox = draw.textbbox((0,0), line, font=font_big)
+        tw = bbox[2]-bbox[0]
+        x = (w-tw)//2
+        y = text_y + i*line_h
+        for ox,oy in [(6,6),(4,4),(2,2),(-2,-2)]:
+            draw.text((x+ox,y+oy), line, font=font_big, fill=(0,0,0,215))
+        draw.text((x,y), line, font=font_big, fill=(255,255,255,255))
 
-        # Sombra doble para legibilidad máxima
-        for ox, oy in [(6, 6), (4, 4), (2, 2), (-2, -2)]:
-            draw.text((x + ox, y + oy), line, font=font_big, fill=(0, 0, 0, 210))
-        # Texto blanco
-        draw.text((x, y), line, font=font_big, fill=(255, 255, 255, 255))
+    # Cursor parpadeante
+    if char_progress < len(text) and (frame_idx//8)%2==0 and lines:
+        bbox = draw.textbbox((0,0), lines[-1], font=font_big)
+        cx = (w-(bbox[2]-bbox[0]))//2 + (bbox[2]-bbox[0]) + 6
+        cy = text_y + (len(lines)-1)*line_h
+        draw.rectangle([cx, cy, cx+6, cy+70], fill=(220,15,15,255))
 
-    # ── Cursor parpadeante ──
-    if char_progress < len(text) and (frame_idx // 8) % 2 == 0 and lines:
-        last = lines[-1]
-        bbox = draw.textbbox((0, 0), last, font=font_big)
-        cx = (w - (bbox[2] - bbox[0])) // 2 + (bbox[2] - bbox[0]) + 6
-        cy = text_start_y + (len(lines) - 1) * line_h
-        draw.rectangle([cx, cy, cx + 6, cy + 68], fill=(220, 15, 15, 255))
-
-    # ── Branding inferior ──
+    # Branding DARK PSYCHOLOGY abajo
     label = "DARK PSYCHOLOGY"
-    bbox = draw.textbbox((0, 0), label, font=font_label)
-    lw = bbox[2] - bbox[0]
-    lx = (w - lw) // 2
-    # Sombra label
-    draw.text((lx + 3, h - 110 + 3), label, font=font_label, fill=(0, 0, 0, 200))
-    draw.text((lx, h - 110), label, font=font_label, fill=(200, 15, 15, 240))
+    bbox = draw.textbbox((0,0), label, font=font_label)
+    lw = bbox[2]-bbox[0]
+    lx = (w-lw)//2
+    draw.text((lx+3, h-115+3), label, font=font_label, fill=(0,0,0,200))
+    draw.text((lx, h-115), label, font=font_label, fill=(210,15,15,245))
 
-    # ── Barra roja inferior ──
-    draw.rectangle([(60, h - 140), (w - 60, h - 133)], fill=(220, 15, 15, 200))
+    # Barra roja inferior
+    draw.rectangle([(60, h-145),(w-60, h-138)], fill=(220,15,15,200))
 
-    # ── Indicador de escena (puntos) ──
-    dot_r = 8
-    dot_spacing = 28
-    total_dots_w = total_scenes * dot_spacing - (dot_spacing - dot_r * 2)
-    dot_x_start = (w - total_dots_w) // 2
-    dot_y = h - 68
+    # Puntos de progreso
+    dot_r = 9
+    spacing = 30
+    total_w = total_scenes * spacing
+    dx = (w - total_w)//2
+    dy = h - 70
     for s in range(total_scenes):
-        cx_ = dot_x_start + s * dot_spacing
-        if s == scene_num:
-            draw.ellipse([cx_, dot_y, cx_ + dot_r * 2, dot_y + dot_r * 2], fill=(220, 15, 15, 255))
-        else:
-            draw.ellipse([cx_, dot_y, cx_ + dot_r * 2, dot_y + dot_r * 2], fill=(120, 120, 120, 160))
+        cx_ = dx + s*spacing
+        color = (220,15,15,255) if s == scene_num else (100,100,100,160)
+        draw.ellipse([cx_, dy, cx_+dot_r*2, dy+dot_r*2], fill=color)
 
     return np.array(img.convert("RGB"))
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  ZOOM suave
+#  ZOOM
 # ═══════════════════════════════════════════════════════════════════
 def zoom_frame(base_img, t, duration):
-    zoom = 1.0 + 0.06 * (t / duration)
+    zoom = 1.0 + 0.06*(t/duration)
     w, h = base_img.size
-    nw, nh = int(w / zoom), int(h / zoom)
-    left = (w - nw) // 2
-    top = (h - nh) // 2
-    return base_img.crop((left, top, left + nw, top + nh)).resize((w, h), Image.LANCZOS)
+    nw, nh = int(w/zoom), int(h/zoom)
+    left = (w-nw)//2
+    top = (h-nh)//2
+    return base_img.crop((left,top,left+nw,top+nh)).resize((w,h), Image.LANCZOS)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -381,56 +358,42 @@ def synth_sync(text, path):
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  MÚSICA — dark ambient variada
+#  MÚSICA dark ambient variada
 # ═══════════════════════════════════════════════════════════════════
 def get_music(duration=120):
     try:
         sr = 44100
-        t = np.linspace(0, duration, int(sr * duration), dtype=np.float32)
-
-        # Variación aleatoria de tonalidad base
+        t = np.linspace(0, duration, int(sr*duration), dtype=np.float32)
         base_hz = random.choice([41.2, 46.25, 55.0, 61.74, 36.71])
 
-        # Drone base
-        music = 0.28 * np.sin(2 * np.pi * base_hz * t)
-        music += 0.14 * np.sin(2 * np.pi * base_hz * 1.5 * t)
-        music += 0.09 * np.sin(2 * np.pi * base_hz * 2.0 * t)
-        music += 0.05 * np.sin(2 * np.pi * base_hz * 3.0 * t)
+        music = 0.28 * np.sin(2*np.pi*base_hz*t)
+        music += 0.14 * np.sin(2*np.pi*base_hz*1.5*t)
+        music += 0.09 * np.sin(2*np.pi*base_hz*2.0*t)
+        music += 0.05 * np.sin(2*np.pi*base_hz*3.0*t)
 
-        # Pulso lento
-        pulse_hz = random.uniform(0.06, 0.11)
-        pulse = 0.5 + 0.5 * np.sin(2 * np.pi * pulse_hz * t)
-        music = music * pulse
+        pulse = 0.5 + 0.5*np.sin(2*np.pi*random.uniform(0.06,0.11)*t)
+        music *= pulse
 
-        # Shimmer tonal
-        shimmer_hz = random.choice([220, 330, 440, 528])
-        shimmer = 0.035 * np.sin(2 * np.pi * shimmer_hz * t) * np.sin(2 * np.pi * 0.2 * t)
-        music += shimmer
+        shimmer_hz = random.choice([220,330,440,528])
+        music += 0.035 * np.sin(2*np.pi*shimmer_hz*t) * np.sin(2*np.pi*0.2*t)
+        music += 0.07 * np.sin(2*np.pi*28*t) * (0.5+0.5*np.sin(2*np.pi*0.04*t))
 
-        # Rumble
-        music += 0.07 * np.sin(2 * np.pi * 28 * t) * (0.5 + 0.5 * np.sin(2 * np.pi * 0.04 * t))
-
-        # Ruido suave (textura)
         noise = np.random.normal(0, 0.012, len(t)).astype(np.float32)
-        noise_env = 0.5 + 0.5 * np.sin(2 * np.pi * 0.07 * t)
-        music += noise * noise_env
+        music += noise * (0.5+0.5*np.sin(2*np.pi*0.07*t))
 
-        # Fade in / fade out
-        fade = int(sr * 3)
-        music[:fade] *= np.linspace(0, 1, fade)
-        music[-fade:] *= np.linspace(1, 0, fade)
+        fade = int(sr*3)
+        music[:fade] *= np.linspace(0,1,fade)
+        music[-fade:] *= np.linspace(1,0,fade)
 
-        # Normalizar a 30% volumen
-        music = music / np.max(np.abs(music) + 1e-9) * 0.30
-        audio_int = (music * 32767).astype(np.int16)
+        music = music / (np.max(np.abs(music))+1e-9) * 0.30
+        audio_int = (music*32767).astype(np.int16)
 
         wav_path = "bg_music.wav"
-        with wave.open(wav_path, "w") as wf:
+        with wave.open(wav_path,"w") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sr)
             wf.writeframes(audio_int.tobytes())
-
         print("  Music generated OK")
         return wav_path
     except Exception as e:
@@ -439,91 +402,74 @@ def get_music(duration=120):
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  BUILD SCENE — lazy frames (sin precalcular todo en memoria)
+#  BUILD SCENE — frames precalculados (compatible con MoviePy 1.x)
 # ═══════════════════════════════════════════════════════════════════
-def build_scene(scene, index, total_scenes=5):
-    img_path = generate_image(scene["prompt"], index)
-    base_img = add_vignette(Image.open(img_path).convert("RGB"))
-
-    audio_path = f"audio_{index}.mp3"
-    synth_sync(scene["text"], audio_path)
+def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
     audio = AudioFileClip(audio_path)
     duration = audio.duration + 1.0
-    text = scene["text"]
+    total_frames = int(duration * FPS)
     reveal_frames = int(FPS * 2.0)
 
-    # Lazy frame maker — sin lista en RAM
-    def make_frame(t):
-        f = int(t * FPS)
+    print(f"    Rendering {total_frames} frames for scene {scene_idx+1}...")
+    frames = []
+    for f in range(total_frames):
+        t = f / FPS
         zoomed = zoom_frame(base_img, t, duration)
         base_arr = np.array(zoomed)
-        char_progress = (
-            min(len(text), int(len(text) * (f / reveal_frames)))
-            if f < reveal_frames
-            else len(text)
-        )
-        frame = render_text_frame(base_arr, text, char_progress, f, index, total_scenes)
-        if f < 4:
+        cp = min(len(text), int(len(text)*(f/reveal_frames))) if f < reveal_frames else len(text)
+        frame = render_text_frame(base_arr, text, cp, f, scene_idx, total_scenes)
+        if f < 5:
             frame = glitch_frame(frame, intensity=5)
-        return frame
+        frames.append(frame.astype(np.uint8))
 
-    clip = ImageClip(make_frame, duration=duration, ismask=False)
+    frames_arr = frames  # lista de arrays
+
+    def make_frame(t):
+        idx = min(int(t*FPS), len(frames_arr)-1)
+        return frames_arr[idx]
+
+    clip = VideoClip(make_frame, duration=duration)
     clip = clip.set_audio(audio)
     return clip.fadein(0.4).fadeout(0.4)
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  BUILD VIDEO — escenas en paralelo
+#  BUILD VIDEO
 # ═══════════════════════════════════════════════════════════════════
 def build_video(scenes):
     total = len(scenes)
 
-    # Generación de imágenes y TTS en paralelo (5x más rápido)
+    # Imágenes en paralelo
     print("\n  Generating all images in parallel...")
+    def gen_img(args):
+        i, prompt = args
+        return i, generate_image(prompt, i)
     with ThreadPoolExecutor(max_workers=5) as ex:
-        img_futures = {ex.submit(generate_image, s["prompt"], i): i for i, s in enumerate(scenes)}
-    img_paths = {img_futures[f]: f.result() for f in img_futures}
+        results = list(ex.map(gen_img, [(i, s["prompt"]) for i,s in enumerate(scenes)]))
+    img_paths = {i: p for i,p in results}
 
-    print("\n  Synthesizing all audio in parallel...")
-    def synth_scene(args):
+    # TTS en paralelo
+    print("  Synthesizing all audio in parallel...")
+    def gen_audio(args):
         i, text = args
         path = f"audio_{i}.mp3"
         synth_sync(text, path)
         return i, path
     with ThreadPoolExecutor(max_workers=5) as ex:
-        audio_futures = list(ex.map(synth_scene, [(i, s["text"]) for i, s in enumerate(scenes)]))
+        list(ex.map(gen_audio, [(i, s["text"]) for i,s in enumerate(scenes)]))
 
     # Construir clips
     clips = []
     for i, scene in enumerate(scenes):
         print(f"\n  Building scene {i+1}/{total}")
         base_img = add_vignette(Image.open(img_paths[i]).convert("RGB"))
-        audio = AudioFileClip(f"audio_{i}.mp3")
-        duration = audio.duration + 1.0
-        text = scene["text"]
-        reveal_frames = int(FPS * 2.0)
-
-        def make_frame(t, _img=base_img, _text=text, _dur=duration, _idx=i):
-            f = int(t * FPS)
-            zoomed = zoom_frame(_img, t, _dur)
-            base_arr = np.array(zoomed)
-            cp = (
-                min(len(_text), int(len(_text) * (f / reveal_frames)))
-                if f < reveal_frames else len(_text)
-            )
-            frame = render_text_frame(base_arr, _text, cp, f, _idx, total)
-            if f < 4:
-                frame = glitch_frame(frame, intensity=5)
-            return frame
-
-        clip = ImageClip(make_frame, duration=duration, ismask=False)
-        clip = clip.set_audio(audio)
-        clips.append(clip.fadein(0.4).fadeout(0.4))
+        clip = build_scene(base_img, f"audio_{i}.mp3", scene["text"], i, total)
+        clips.append(clip)
 
     final = concatenate_videoclips(clips, method="compose")
 
-    # Música de fondo
-    music_path = get_music(duration=int(final.duration) + 5)
+    # Música
+    music_path = get_music(duration=int(final.duration)+5)
     if music_path:
         try:
             music = AudioFileClip(music_path)
@@ -537,14 +483,10 @@ def build_video(scenes):
     output = "viral_short.mp4"
     print("\n  Rendering final video...")
     final.write_videofile(
-        output,
-        fps=FPS,
-        codec="libx264",
-        audio_codec="aac",
-        bitrate="12000k",
-        preset="slow",
-        threads=4,
-        ffmpeg_params=["-crf", "18"],
+        output, fps=FPS, codec="libx264",
+        audio_codec="aac", bitrate="12000k",
+        preset="slow", threads=4,
+        ffmpeg_params=["-crf","18"],
     )
     return output
 
@@ -558,33 +500,26 @@ def upload_to_youtube(video_path, title, description, tags):
     from googleapiclient.http import MediaFileUpload
     from google.oauth2.credentials import Credentials
 
-    # Token seguro con tempfile
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
         tf.write(os.environ["TOKEN_JSON"])
         token_path = tf.name
 
     try:
         creds = Credentials.from_authorized_user_file(
-            token_path,
-            scopes=["https://www.googleapis.com/auth/youtube.upload"],
+            token_path, scopes=["https://www.googleapis.com/auth/youtube.upload"]
         )
         youtube = yt_build("youtube", "v3", credentials=creds)
-        body = {
-            "snippet": {
-                "title": title,
-                "description": (
-                    description
-                    + "\n\n#darkpsychology #psychology #shorts "
-                    + "#mindcontrol #manipulation #brain #mindset #facts"
-                ),
-                "tags": tags,
-                "categoryId": "22",
-            },
-            "status": {"privacyStatus": "public"},
-        }
         request = youtube.videos().insert(
             part="snippet,status",
-            body=body,
+            body={
+                "snippet": {
+                    "title": title,
+                    "description": description + "\n\n#darkpsychology #psychology #shorts #mindcontrol #manipulation #brain",
+                    "tags": tags,
+                    "categoryId": "22",
+                },
+                "status": {"privacyStatus": "public"},
+            },
             media_body=MediaFileUpload(video_path, mimetype="video/mp4", resumable=True),
         )
         response = request.execute()
@@ -597,9 +532,9 @@ def upload_to_youtube(video_path, title, description, tags):
 #  MAIN
 # ═══════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("=" * 60)
+    print("="*60)
     print("  AUTO YOUTUBE BOT — DARK PSYCHOLOGY SHORTS")
-    print("=" * 60)
+    print("="*60)
 
     script = generate_script_with_gemini()
     print(f"\n  Title: {script['title']}")
@@ -608,6 +543,6 @@ if __name__ == "__main__":
     video = build_video(script["scenes"])
     upload_to_youtube(video, script["title"], script["description"], script["tags"])
 
-    print("\n" + "=" * 60)
+    print("\n"+"="*60)
     print("  DONE!")
-    print("=" * 60)
+    print("="*60)

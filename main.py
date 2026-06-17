@@ -1,6 +1,5 @@
 import os, asyncio, random, requests
-from PIL import Image, ImageDraw, ImageFont
-import numpy as np
+from PIL import Image
 import PIL.Image
 
 if not hasattr(PIL.Image, "ANTIALIAS"):
@@ -10,21 +9,20 @@ from moviepy.editor import (
     ImageClip,
     AudioFileClip,
     concatenate_videoclips,
-    CompositeAudioClip,
     vfx
 )
 
 from edge_tts import Communicate
 
 # -------------------------
-# CONFIG PRO
+# CONFIG
 # -------------------------
 RESOLUTION = (1080, 1920)
 FPS = 30
 DURATION = 4
 
 # -------------------------
-# SCRIPT ENGINE (NO REPETITIVO)
+# SCRIPT
 # -------------------------
 class ScriptGenerator:
 
@@ -52,18 +50,19 @@ class ScriptGenerator:
         scenes = []
         for i in range(5):
             scenes.append({
-                "text": f"{hook} {topic}. Punto {i+1}: impacto real en tu comportamiento diario.",
-                "image_prompt": f"{topic}, cinematic dark, ultra realistic, dramatic lighting, depth of field, shot {i+1}"
+                "text": f"{hook} {topic}. Punto {i+1}.",
+                "image_prompt": f"{topic}, cinematic, dark, ultra realistic, shot {i+1}"
             })
 
         return {
             "title": hook,
-            "description": "Video generado automáticamente con IA",
+            "description": "Video generado con IA",
+            "tags": ["psychology", "mind"],
             "scenes": scenes
         }
 
 # -------------------------
-# TTS (EDGE TTS)
+# TTS
 # -------------------------
 async def synth(text, path):
     tts = Communicate(text, voice="en-US-GuyNeural")
@@ -73,7 +72,7 @@ def synth_sync(text, path):
     asyncio.run(synth(text, path))
 
 # -------------------------
-# IMAGE GENERATION
+# IMAGE
 # -------------------------
 def get_image(prompt, i):
     url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt)}"
@@ -83,14 +82,10 @@ def get_image(prompt, i):
     with open(path, "wb") as f:
         f.write(r.content)
 
-    img = Image.open(path).convert("RGB")
-    img = img.resize(RESOLUTION)
-    img.save(path)
-
     return path
 
 # -------------------------
-# VIDEO RENDER (PROFESIONAL Y ESTABLE)
+# VIDEO
 # -------------------------
 def render_video(scenes):
 
@@ -99,34 +94,26 @@ def render_video(scenes):
     for i, scene in enumerate(scenes):
         print(f"🎬 Scene {i+1}")
 
-        # IMAGE
         img_path = get_image(scene["image_prompt"], i)
 
-        # AUDIO
         audio_path = f"audio_{i}.mp3"
         synth_sync(scene["text"], audio_path)
+
         audio = AudioFileClip(audio_path)
 
-        # CLIP BASE
         clip = ImageClip(img_path).set_duration(audio.duration)
 
-        # 🔥 ZOOM SUAVE PRO (compatibilidad total)
+        # zoom suave
         clip = clip.fx(vfx.resize, lambda t: 1 + 0.03 * t)
 
-        # AUDIO
         clip = clip.set_audio(audio)
 
         clips.append(clip)
 
-    # CONCAT FINAL
     final = concatenate_videoclips(clips, method="compose")
 
-    # AUDIO MIX GLOBAL
-    final_audio = CompositeAudioClip([c.audio for c in clips])
-    final = final.set_audio(final_audio)
-
-    # EXPORT FULL HD PRO
     output = "viral_short.mp4"
+
     final.write_videofile(
         output,
         fps=FPS,
@@ -139,16 +126,60 @@ def render_video(scenes):
     return output
 
 # -------------------------
+# UPLOAD (OBLIGATORIO)
+# -------------------------
+def upload_to_youtube(video_path, title, description, tags):
+    print("📤 UPLOADING...")
+
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    from google.oauth2.credentials import Credentials
+
+    TOKEN_JSON = os.environ["TOKEN_JSON"]
+
+    with open("token.json", "w") as f:
+        f.write(TOKEN_JSON)
+
+    creds = Credentials.from_authorized_user_file(
+        "token.json",
+        scopes=["https://www.googleapis.com/auth/youtube.upload"]
+    )
+
+    youtube = build("youtube", "v3", credentials=creds)
+
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body={
+            "snippet": {
+                "title": title,
+                "description": description,
+                "tags": tags,
+                "categoryId": "22"
+            },
+            "status": {"privacyStatus": "public"}
+        },
+        media_body=MediaFileUpload(video_path)
+    )
+
+    response = request.execute()
+
+    print("✅ UPLOADED:")
+    print("https://www.youtube.com/watch?v=" + response["id"])
+
+# -------------------------
 # MAIN
-# -------------------------vídeo PRO Full HD...")
+# -------------------------
 if __name__ == "__main__":
+
+    print("🚀 START")
+
     script = ScriptGenerator.generate()
 
-    print("🎬 creando video...")
+    print("🎬 creating video...")
 
     video = render_video(script["scenes"])
 
-    print("📤 subiendo a YouTube...")
+    print("📤 uploading...")
 
     upload_to_youtube(
         video,
@@ -157,4 +188,4 @@ if __name__ == "__main__":
         script["tags"]
     )
 
-    print("✅ FIN DEL PROCESO")
+    print("✅ DONE")

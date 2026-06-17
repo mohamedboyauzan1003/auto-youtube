@@ -1,5 +1,5 @@
-import os, json, asyncio, textwrap, requests, random
-from PIL import Image, ImageDraw, ImageFont
+import os, json, asyncio, random, requests
+from PIL import Image
 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 import edge_tts
 from googleapiclient.discovery import build
@@ -9,7 +9,7 @@ from google.oauth2.credentials import Credentials
 TOKEN_JSON = os.environ["TOKEN_JSON"]
 
 # -------------------------
-# SCRIPT GENERATOR GRATIS
+# SCRIPT GENERATOR
 # -------------------------
 def generate_script():
     topics = [
@@ -46,12 +46,16 @@ def generate_image(prompt, index):
     url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt)}"
     r = requests.get(url, timeout=60)
 
+    if r.status_code != 200:
+        raise Exception("Image generation failed")
+
     path = f"scene_{index}.jpg"
     with open(path, "wb") as f:
         f.write(r.content)
 
     img = Image.open(path).resize((1080, 1920))
     img.save(path)
+
     return path
 
 # -------------------------
@@ -63,6 +67,10 @@ async def generate_audio(text, index):
     await tts.save(path)
     return path
 
+
+def generate_audio_sync(text, index):
+    return asyncio.run(generate_audio(text, index))
+
 # -------------------------
 # VIDEO
 # -------------------------
@@ -73,16 +81,25 @@ def create_video(scenes):
         print(f"Scene {i+1}")
 
         img = generate_image(scene["image_prompt"], i)
-        audio_path = asyncio.run(generate_audio(scene["text"], i))
+        audio_path = generate_audio_sync(scene["text"], i)
+
+        if not audio_path or not os.path.exists(audio_path):
+            continue
+
         audio = AudioFileClip(audio_path)
 
-        # ✅ FIX MOVIEPY
         clip = ImageClip(img, duration=audio.duration).set_audio(audio)
         clips.append(clip)
 
     final = concatenate_videoclips(clips, method="compose")
+
     output = "output.mp4"
     final.write_videofile(output, fps=24, codec="libx264", audio_codec="aac")
+
+    # cleanup
+    for c in clips:
+        c.close()
+    final.close()
 
     return output
 
@@ -93,7 +110,11 @@ def upload_to_youtube(video_path, title, description, tags):
     with open("token.json", "w") as f:
         f.write(TOKEN_JSON)
 
-    creds = Credentials.from_authorized_user_file("token.json")
+    creds = Credentials.from_authorized_user_file(
+        "token.json",
+        scopes=["https://www.googleapis.com/auth/youtube.upload"]
+    )
+
     youtube = build("youtube", "v3", credentials=creds)
 
     body = {
@@ -107,6 +128,7 @@ def upload_to_youtube(video_path, title, description, tags):
     }
 
     media = MediaFileUpload(video_path, mimetype="video/mp4")
+
     request = youtube.videos().insert(
         part="snippet,status",
         body=body,

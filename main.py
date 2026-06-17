@@ -1,4 +1,4 @@
-﻿import os, json, asyncio, textwrap, requests, random
+import os, json, asyncio, textwrap, requests, random
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 import edge_tts
@@ -76,7 +76,8 @@ def create_video(scenes):
         audio_path = asyncio.run(generate_audio(scene["text"], i))
         audio = AudioFileClip(audio_path)
 
-        clip = ImageClip(img, duration=audio.duration).with_audio(audio)
+        # ✅ FIX MOVIEPY
+        clip = ImageClip(img, duration=audio.duration).set_audio(audio)
         clips.append(clip)
 
     final = concatenate_videoclips(clips, method="compose")
@@ -106,7 +107,11 @@ def upload_to_youtube(video_path, title, description, tags):
     }
 
     media = MediaFileUpload(video_path, mimetype="video/mp4")
-    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=body,
+        media_body=media
+    )
 
     response = request.execute()
     print("Uploaded:", response["id"])

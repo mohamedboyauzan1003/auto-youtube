@@ -1,4 +1,4 @@
-﻿name: Auto YouTube Upload
+name: Auto YouTube Upload
 
 on:
   schedule:
@@ -8,7 +8,6 @@ on:
 jobs:
   upload:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -25,10 +24,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install moviepy==1.0.3 edge-tts requests Pillow google-auth-oauthlib google-auth-httplib2 google-api-python-client
+          pip install moviepy==1.0.3 edge-tts requests Pillow google-auth-oauthlib google-auth-httplib2 google-api-python-client numpy
 
       - name: Run script
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
         run: python main.py

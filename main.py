@@ -140,14 +140,21 @@ def render_video(scenes):
 
 # -------------------------
 # MAIN
-# -------------------------
+# -------------------------vídeo PRO Full HD...")
 if __name__ == "__main__":
-    print("🚀 Generando vídeo PRO Full HD...")
-
     script = ScriptGenerator.generate()
 
-    print("🧠 TITLE:", script["title"])
+    print("🎬 creando video...")
 
     video = render_video(script["scenes"])
 
-    print("✅ LISTO:", video)
+    print("📤 subiendo a YouTube...")
+
+    upload_to_youtube(
+        video,
+        script["title"],
+        script["description"],
+        script["tags"]
+    )
+
+    print("✅ FIN DEL PROCESO")

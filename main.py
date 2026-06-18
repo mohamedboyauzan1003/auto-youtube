@@ -1,5 +1,5 @@
 import os, asyncio, random, requests, numpy as np, textwrap, json, time, wave, tempfile
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 import PIL.Image
 
 if not hasattr(PIL.Image, "ANTIALIAS"):
@@ -13,404 +13,461 @@ from concurrent.futures import ThreadPoolExecutor
 W, H = 1080, 1920
 FPS = 30
 
-# ═══════════════════════════════════════════════════════════════════
-#  SCRIPT — Gemini con retry + fallback robusto
-# ═══════════════════════════════════════════════════════════════════
-def generate_script_with_gemini():
+# ═══════════════════════════════════════════════════════════
+#  GEMINI SCRIPT GENERATOR
+# ═══════════════════════════════════════════════════════════
+def generate_script():
     api_key = os.environ.get("GEMINI_API_KEY", "")
     topics = [
         "manipulation tactics people use daily",
-        "dark cognitive biases that control your decisions",
-        "subconscious mind tricks you do not know about",
-        "body language secrets manipulators use",
-        "dark persuasion techniques used in advertising",
+        "dark cognitive biases controlling your decisions",
+        "subconscious mind tricks you never knew about",
+        "body language secrets manipulators exploit",
+        "dark persuasion techniques in advertising",
         "psychological reasons you cannot say no",
-        "signs someone is gaslighting you",
-        "how your ego blinds you from the truth",
-        "dark truths about human nature nobody talks about",
-        "hidden reasons people self sabotage",
-        "psychological tricks used by narcissists",
-        "how fear controls every decision you make",
-        "the dark side of social media on your brain",
-        "why your brain is wired for negativity",
-        "psychological power moves used by leaders",
+        "signs someone is gaslighting you right now",
+        "how your ego blinds you from truth",
+        "dark truths about human nature nobody says",
+        "hidden reasons people self sabotage success",
+        "psychological tricks narcissists use on you",
+        "how fear silently controls every decision",
+        "dark side of social media on your brain",
+        "why your brain is hardwired for negativity",
+        "psychological power moves of influential leaders",
+        "why intelligent people stay in toxic relationships",
+        "how childhood trauma silently shapes you today",
+        "dark secrets of the world most persuasive people",
+        "why your brain secretly craves drama",
+        "how dopamine addiction is engineered to control you",
+        "the psychology behind why people obey authority",
+        "dark reason why you care what strangers think",
+        "how silence is used as a weapon of control",
+        "psychological signs someone secretly envies you",
+        "why your brain sabotages your own happiness",
     ]
+
     topic = random.choice(topics)
     print(f"  Topic: {topic}")
 
-    prompt = f"""You are a viral YouTube Shorts scriptwriter for dark psychology content.
-Create a script about: {topic}
+    prompt = f"""You are a viral dark psychology YouTube Shorts scriptwriter.
+Write about: {topic}
 
-IMPORTANT: Return ONLY raw JSON. No markdown. No backticks. No explanation. Just the JSON object.
+Rules:
+- Each scene text: max 12 words, dramatic, dark, with "..." pauses
+- Each image prompt: vivid anime dark art scene, very specific, unique per scene
+- Title: under 60 chars, no emojis, makes people stop scrolling
 
+Return ONLY this raw JSON (no markdown, no backticks):
 {{
-  "title": "catchy title under 60 characters no emojis",
-  "description": "compelling description under 150 characters",
-  "tags": ["darkpsychology","psychology","mindcontrol","manipulation","shorts","brain","mindset","facts","awareness","secrets"],
+  "title": "...",
+  "description": "...",
+  "tags": ["darkpsychology","psychology","mindcontrol","manipulation","shorts","brain","facts","awareness","secrets","mindset"],
   "scenes": [
-    {{"text": "short dramatic sentence max 12 words dark tone with pauses marked by ...", "prompt": "masterpiece best quality dark anime cinematic, specific unique detailed scene, dramatic chiaroscuro lighting, ultra detailed 8k"}},
-    {{"text": "short dramatic sentence max 12 words dark tone with pauses marked by ...", "prompt": "masterpiece best quality dark anime cinematic, specific unique detailed scene different from scene 1, dramatic lighting, ultra detailed 8k"}},
-    {{"text": "short dramatic sentence max 12 words dark tone with pauses marked by ...", "prompt": "masterpiece best quality dark anime cinematic, specific unique detailed scene, moody atmosphere, ultra detailed 8k"}},
-    {{"text": "short dramatic sentence max 12 words dark tone with pauses marked by ...", "prompt": "masterpiece best quality dark anime cinematic, specific unique detailed scene, epic scale, ultra detailed 8k"}},
-    {{"text": "short dramatic sentence max 12 words dark tone with pauses marked by ...", "prompt": "masterpiece best quality dark anime cinematic, epic final scene powerful emotion, blazing dramatic lighting, ultra detailed 8k"}}
+    {{"text": "...", "prompt": "dark anime art, [unique specific scene], dramatic chiaroscuro, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark anime art, [unique specific scene], moody atmosphere, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark anime art, [unique specific scene], cinematic, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark anime art, [unique specific scene], epic scale, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark anime art, [unique epic final scene], blazing light breaking darkness, ultra detailed, 8k, no text"}}
   ]
 }}"""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.9, "maxOutputTokens": 1500},
+        "generationConfig": {"temperature": 1.0, "maxOutputTokens": 1500},
     }
 
     for attempt in range(3):
         try:
             r = requests.post(url, json=payload, timeout=30)
-            print(f"  Gemini status: {r.status_code}")
             if r.status_code == 429:
-                wait = 10 * (2 ** attempt)
-                print(f"  Rate limit — waiting {wait}s...")
+                wait = 15 * (2 ** attempt)
+                print(f"  Gemini rate limit, waiting {wait}s...")
                 time.sleep(wait)
                 continue
-            data = r.json()
-            if "candidates" not in data:
-                print(f"  Gemini error: {json.dumps(data)[:200]}")
+            if r.status_code != 200:
+                print(f"  Gemini {r.status_code}: {r.text[:200]}")
                 break
+            data = r.json()
             raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            raw = raw.replace("```json", "").replace("```", "").strip()
+            raw = raw.replace("```json","").replace("```","").strip()
             script = json.loads(raw)
             print(f"  Gemini OK: {script['title']}")
             return script
         except Exception as e:
-            print(f"  Gemini attempt {attempt+1} error: {e}")
+            print(f"  Gemini attempt {attempt+1}: {e}")
             time.sleep(5)
 
-    print("  Using fallback script.")
-    return get_fallback_script()
+    return fallback_script()
 
-
-def get_fallback_script():
-    scripts = [
+def fallback_script():
+    options = [
         {
-            "title": "3 Dark Psychology Tricks Used Against You Daily",
-            "description": "The hidden manipulation tactics used on you every single day.",
+            "title": "3 Dark Tricks Used to Manipulate You Daily",
+            "description": "Discover the hidden manipulation tactics used on you every single day.",
             "tags": ["darkpsychology","manipulation","mindcontrol","psychology","shorts","facts","brain","mindset","secrets","awareness"],
             "scenes": [
-                {"text": "Someone manipulates your decisions... every single day.", "prompt": "masterpiece best quality dark anime, shadowy puppet master controlling human silhouette, crimson black dramatic lighting, ultra detailed 8k"},
-                {"text": "Foot-in-the-door... makes you agree to anything.", "prompt": "masterpiece best quality dark anime, massive ominous door opening into endless void, eerie crimson glow, ultra detailed 8k"},
-                {"text": "Scarcity triggers panic... bypassing all rational thought.", "prompt": "masterpiece best quality dark anime, cracked hourglass with crimson sand, dramatic chiaroscuro lighting, ultra detailed 8k"},
-                {"text": "Social proof hijacks your mind... without you knowing.", "prompt": "masterpiece best quality dark anime, crowd of shadowy identical figures one glowing different, ultra detailed 8k"},
-                {"text": "Now you know these tricks... protect your mind forever.", "prompt": "masterpiece best quality dark anime, lone warrior breaking free from dark chains into blazing golden light, epic scale, ultra detailed 8k"},
+                {"text": "Every day... someone hijacks your decisions silently.", "prompt": "dark anime art, shadowy puppet master pulling strings on human silhouette, blood red and black, volumetric fog, ultra detailed 8k, no text"},
+                {"text": "Foot-in-the-door... gets you to agree to anything.", "prompt": "dark anime art, massive ancient door opening into infinite void, eerie crimson glow from within, ultra detailed 8k, no text"},
+                {"text": "Artificial scarcity... triggers your deepest panic response.", "prompt": "dark anime art, cracked hourglass with glowing crimson sand draining, dramatic shadows, ultra detailed 8k, no text"},
+                {"text": "Social proof... makes you copy others like a puppet.", "prompt": "dark anime art, vast crowd of shadowy identical figures, one single glowing silhouette standing apart, ultra detailed 8k, no text"},
+                {"text": "Now you see the trick... you can finally break free.", "prompt": "dark anime art, lone warrior figure shattering dark chains, explosive golden light breaking through darkness, epic cinematic, ultra detailed 8k, no text"},
             ],
         },
         {
             "title": "Signs Someone Is Secretly Manipulating You",
-            "description": "Subtle signs that reveal when dark psychology is being used against you.",
+            "description": "These hidden signs reveal dark psychology being used against you.",
             "tags": ["manipulation","darkpsychology","toxicpeople","mindcontrol","psychology","awareness","shorts","mentalhealth","brain","secrets"],
             "scenes": [
-                {"text": "They make you feel guilty... for things not your fault.", "prompt": "masterpiece best quality dark anime, figure crushed under invisible dark weight, crimson energy, ultra detailed 8k"},
-                {"text": "They isolate you slowly... until you depend on them.", "prompt": "masterpiece best quality dark anime, person trapped in glass sphere surrounded by endless darkness, ultra detailed 8k"},
-                {"text": "Gaslighting makes you question... your own sanity.", "prompt": "masterpiece best quality dark anime, shattered mirror distorted reflection blood red violet glow, ultra detailed 8k"},
-                {"text": "Love bombing first... then silence as punishment.", "prompt": "masterpiece best quality dark anime, roses transforming into black thorns dramatic contrast dark background, ultra detailed 8k"},
-                {"text": "Recognizing these signs... is how you reclaim your power.", "prompt": "masterpiece best quality dark anime, figure rising from darkness into brilliant golden light, epic cinematic, ultra detailed 8k"},
+                {"text": "They make you feel guilty... for their mistakes.", "prompt": "dark anime art, cloaked figure placing invisible crushing weight on kneeling person, dark crimson energy, ultra detailed 8k, no text"},
+                {"text": "Slowly they isolate you... cutting every connection.", "prompt": "dark anime art, person reaching out through glass prison walls, hands of shadows pulling them back, ultra detailed 8k, no text"},
+                {"text": "Gaslighting rewrites your reality... making you doubt yourself.", "prompt": "dark anime art, infinite hall of cracked mirrors each showing different distorted reflection, violet and red glow, ultra detailed 8k, no text"},
+                {"text": "Love bombing then silence... the cycle of control.", "prompt": "dark anime art, beautiful roses blooming then violently transforming to black thorns with crimson drops, ultra detailed 8k, no text"},
+                {"text": "Recognizing this pattern... is your first act of freedom.", "prompt": "dark anime art, figure standing tall breaking invisible puppet strings, brilliant golden dawn light behind them, ultra detailed 8k, no text"},
             ],
         },
         {
-            "title": "Your Brain Lies To You Every Single Day",
-            "description": "Your brain is not as honest as you think. Here is what it hides.",
+            "title": "Your Brain Deceives You Every Single Day",
+            "description": "The hidden lies your brain tells you that shape your entire reality.",
             "tags": ["brain","psychology","mindcontrol","darkpsychology","facts","shorts","mindset","consciousness","awareness","secrets"],
             "scenes": [
-                {"text": "Your brain filters 99 percent of reality... to protect you.", "prompt": "masterpiece best quality dark anime, glowing human brain floating in cosmic space electric synapses, ultra detailed 8k"},
-                {"text": "Confirmation bias... makes you see only what you believe.", "prompt": "masterpiece best quality dark anime, single eye extreme tunnel vision shadowy distorted world outside, ultra detailed 8k"},
-                {"text": "Your memories are not recordings... your brain rewrites them.", "prompt": "masterpiece best quality dark anime, film reel melting distorting into darkness surreal, ultra detailed 8k"},
-                {"text": "Dunning-Kruger... makes the least skilled feel most confident.", "prompt": "masterpiece best quality dark anime, figure standing on narrow peak unaware of void below, ultra detailed 8k"},
-                {"text": "Know your brain's lies... and you unlock true clarity.", "prompt": "masterpiece best quality dark anime, mind shattering chains cosmos exploding into enlightened light, ultra detailed 8k"},
+                {"text": "Your brain filters 99 percent of reality... to protect you.", "prompt": "dark anime art, glowing translucent human brain suspended in cosmic void, electric synapses firing like lightning, ultra detailed 8k, no text"},
+                {"text": "Confirmation bias... traps you in a prison of false beliefs.", "prompt": "dark anime art, massive eye with narrow tunnel vision, shadowy distorted figures lurking outside the view, ultra detailed 8k, no text"},
+                {"text": "Your memories are fiction... rewritten every time you recall them.", "prompt": "dark anime art, antique film reel melting and distorting, frames changing as they fall into darkness, ultra detailed 8k, no text"},
+                {"text": "Dunning-Kruger... the less you know, the more confident you feel.", "prompt": "dark anime art, arrogant figure standing triumphantly at peak, completely unaware of endless abyss below, ultra detailed 8k, no text"},
+                {"text": "See the lies clearly... and your mind becomes truly free.", "prompt": "dark anime art, figure meditating with glowing aura, mental chains dissolving into pure cosmic light, ultra detailed 8k, no text"},
             ],
         },
     ]
-    return random.choice(scripts)
+    return random.choice(options)
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  IMAGEN — Pollinations HD con retry
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
+#  IMAGE GENERATION — Pollinations FLUX
+# ═══════════════════════════════════════════════════════════
 ANIME_STYLES = [
     "makoto shinkai anime style",
-    "studio mappa dark anime",
-    "demon slayer anime art style",
-    "attack on titan cinematic anime",
-    "jujutsu kaisen dark aesthetic anime",
+    "studio mappa dark anime art",
+    "demon slayer kimetsu no yaiba art style",
+    "attack on titan dark cinematic anime",
+    "jujutsu kaisen dark aesthetic",
     "dark fantasy anime illustration",
-    "cinematic anime art",
+    "cinematic anime concept art",
+    "yoji shinkawa dark illustration style",
+    "dark anime oil painting style",
 ]
 
 def generate_image(prompt, index):
-    print(f"  Generating image {index+1}...")
+    print(f"  Image {index+1}...")
     style = random.choice(ANIME_STYLES)
+    seed = int(time.time()) * (index+1) + random.randint(10000, 99999)
+
     full_prompt = (
         f"{style}, {prompt}, "
-        f"masterpiece, best quality, ultra detailed, 8k, "
-        f"dramatic cinematic lighting, deep shadows, "
-        f"no watermark, no text, no logo, vertical composition"
+        f"masterpiece, best quality, ultra detailed, 8k resolution, "
+        f"dramatic cinematic lighting, deep rich shadows, "
+        f"professional digital art, "
+        f"no watermark, no text, no signature, vertical portrait composition"
     )
-    for attempt in range(3):
-        path = try_pollinations(full_prompt, index, attempt)
+
+    # Try flux model first (highest quality)
+    for model in ["flux", "flux-realism", "turbo"]:
+        path = _try_pollinations(full_prompt, index, seed, model)
         if path:
             return path
-        time.sleep(4)
-    return make_dark_gradient(index)
+        seed += 1337
+        time.sleep(2)
 
+    return _dark_gradient_fallback(index)
 
-def try_pollinations(full_prompt, index, attempt=0):
+def _try_pollinations(prompt, index, seed, model="flux"):
     try:
-        seed = int(time.time()) + index * 7919 + attempt * 1337 + random.randint(0, 9999)
-        encoded = requests.utils.quote(full_prompt)
+        encoded = requests.utils.quote(prompt)
         url = (
             f"https://image.pollinations.ai/prompt/{encoded}"
             f"?width=1080&height=1920&seed={seed}"
-            f"&model=flux&nologo=true&enhance=true"
+            f"&model={model}&nologo=true&enhance=true"
         )
-        r = requests.get(url, timeout=120)
-        if r.status_code == 200 and len(r.content) > 10000:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://pollinations.ai/",
+        }
+        r = requests.get(url, timeout=120, headers=headers)
+        if r.status_code == 200 and len(r.content) > 15000:
             path = f"img_{index}.jpg"
             with open(path, "wb") as f:
                 f.write(r.content)
             img = Image.open(path).convert("RGB").resize((W, H), Image.LANCZOS)
-            img = ImageEnhance.Contrast(img).enhance(1.25)
-            img = ImageEnhance.Sharpness(img).enhance(1.4)
-            img = ImageEnhance.Color(img).enhance(1.15)
-            img.save(path, quality=97)
-            print(f"  Pollinations OK (attempt {attempt+1})")
+            # Quality enhancement
+            img = ImageEnhance.Contrast(img).enhance(1.2)
+            img = ImageEnhance.Sharpness(img).enhance(1.5)
+            img = ImageEnhance.Color(img).enhance(1.1)
+            img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
+            img.save(path, quality=98, optimize=True)
+            print(f"  Image {index+1} OK ({model})")
             return path
+        else:
+            print(f"  {model}: status={r.status_code}, size={len(r.content)}")
     except Exception as e:
-        print(f"  Pollinations error attempt {attempt+1}: {e}")
+        print(f"  {model} error: {e}")
     return None
 
-
-def make_dark_gradient(index):
-    img = Image.new("RGB", (W, H), (5, 2, 12))
+def _dark_gradient_fallback(index):
+    img = Image.new("RGB", (W, H))
     draw = ImageDraw.Draw(img)
+    colors = [(5,2,12), (15,5,25), (8,3,18), (20,8,35)]
+    c = random.choice(colors)
     for y in range(H):
-        ratio = y / H
-        draw.line([(0, y), (W, y)], fill=(int(5+30*ratio), int(2+5*ratio), int(12+40*ratio)))
+        r = int(c[0] + 40*(y/H))
+        g = int(c[1] + 10*(y/H))
+        b = int(c[2] + 60*(y/H))
+        draw.line([(0,y),(W,y)], fill=(r,g,b))
     path = f"img_{index}.jpg"
     img.save(path)
-    print(f"  Using dark gradient fallback for image {index+1}")
     return path
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 #  VIGNETTE
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 def add_vignette(img):
     w, h = img.size
     mask = Image.new("L", (w, h), 0)
     draw = ImageDraw.Draw(mask)
     steps = min(w, h) // 2
     for i in range(steps):
-        alpha = int(255 * (i / steps) ** 0.5)
+        alpha = int(255 * (i / steps) ** 0.55)
         draw.ellipse([i, i, w-i, h-i], fill=alpha)
-    return Image.composite(img, Image.new("RGB", (w, h), (0, 0, 0)), mask)
+    return Image.composite(img, Image.new("RGB", (w, h), (0,0,0)), mask)
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 #  GLITCH
-# ═══════════════════════════════════════════════════════════════════
-def glitch_frame(img_array, intensity=3):
-    img = img_array.copy()
+# ═══════════════════════════════════════════════════════════
+def glitch_frame(arr, intensity=4):
+    img = arr.copy()
     h, w = img.shape[:2]
     for _ in range(intensity):
-        y = random.randint(0, h - 10)
-        shift = random.randint(-10, 10)
+        y = random.randint(0, h-10)
+        shift = random.randint(-12, 12)
         sh = random.randint(2, 8)
         strip = img[y:y+sh, :].copy()
-        if shift > 0 and shift < w:
+        if 0 < shift < w:
             img[y:y+sh, shift:] = strip[:, :-shift]
-        elif shift < 0 and -shift < w:
+        elif -w < shift < 0:
             img[y:y+sh, :shift] = strip[:, -shift:]
-    s = random.randint(1, 4)
+    s = random.randint(2, 5)
     img[:,:,0] = np.roll(img[:,:,0], s, axis=1)
     img[:,:,2] = np.roll(img[:,:,2], -s, axis=1)
     return img
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 #  FONTS
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 def get_fonts():
-    paths = [
+    font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
     ]
-    for fp in paths:
+    for fp in font_paths:
         if os.path.exists(fp):
             try:
                 return (
-                    ImageFont.truetype(fp, 72),
-                    ImageFont.truetype(fp, 42),
+                    ImageFont.truetype(fp, 76),   # main text
+                    ImageFont.truetype(fp, 40),   # label
+                    ImageFont.truetype(fp, 34),   # small
                 )
             except:
                 pass
     d = ImageFont.load_default()
-    return d, d
+    return d, d, d
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  TEXT RENDERER — texto arriba, branding abajo
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
+#  TEXT RENDERER
+# ═══════════════════════════════════════════════════════════
 def render_text_frame(base_arr, text, char_progress, frame_idx, scene_num, total_scenes):
     img = Image.fromarray(base_arr.astype(np.uint8)).convert("RGBA")
     w, h = img.size
 
-    # Gradiente superior oscuro
+    # Top gradient (for text readability)
     grad_top = Image.new("RGBA", (w, h), (0,0,0,0))
     gd = ImageDraw.Draw(grad_top)
-    gh = int(h * 0.40)
-    for y in range(gh):
-        a = int(195 * (1 - y/gh) ** 1.2)
+    top_h = int(h * 0.45)
+    for y in range(top_h):
+        a = int(200 * (1 - y/top_h) ** 1.1)
         gd.line([(0,y),(w,y)], fill=(0,0,0,a))
     img = Image.alpha_composite(img, grad_top)
 
-    # Gradiente inferior oscuro
+    # Bottom gradient (for branding)
     grad_bot = Image.new("RGBA", (w, h), (0,0,0,0))
     gd2 = ImageDraw.Draw(grad_bot)
-    gbh = int(h * 0.20)
-    for y in range(h - gbh, h):
-        a = int(210 * ((y-(h-gbh))/gbh) ** 1.1)
+    bot_h = int(h * 0.18)
+    for y in range(h - bot_h, h):
+        a = int(220 * ((y-(h-bot_h))/bot_h) ** 1.0)
         gd2.line([(0,y),(w,y)], fill=(0,0,0,a))
     img = Image.alpha_composite(img, grad_bot)
 
     draw = ImageDraw.Draw(img)
-    font_big, font_label = get_fonts()
+    font_big, font_label, font_small = get_fonts()
 
-    # Barra roja superior
-    bar_top = 100
-    draw.rectangle([(60, bar_top), (w-60, bar_top+7)], fill=(220,15,15,255))
+    # ── Top red accent bar
+    bar_y = 90
+    draw.rectangle([(50, bar_y), (w-50, bar_y+8)], fill=(220,15,15,255))
 
-    # Texto arriba con typewriter
+    # ── Typewriter text (top section)
     partial = text[:char_progress]
-    lines = textwrap.wrap(partial, width=16)
-    line_h = 90
-    text_y = bar_top + 30
+    lines = textwrap.wrap(partial, width=15)
+    line_h = 95
+    text_y = bar_y + 28
 
     for i, line in enumerate(lines):
         bbox = draw.textbbox((0,0), line, font=font_big)
-        tw = bbox[2]-bbox[0]
-        x = (w-tw)//2
-        y = text_y + i*line_h
-        for ox,oy in [(6,6),(4,4),(2,2),(-2,-2)]:
-            draw.text((x+ox,y+oy), line, font=font_big, fill=(0,0,0,215))
-        draw.text((x,y), line, font=font_big, fill=(255,255,255,255))
+        tw = bbox[2] - bbox[0]
+        x = (w - tw) // 2
+        y = text_y + i * line_h
 
-    # Cursor parpadeante
-    if char_progress < len(text) and (frame_idx//8)%2==0 and lines:
+        # Multi-layer shadow for depth
+        for ox, oy, alpha in [(8,8,140),(5,5,160),(3,3,180),(1,1,200)]:
+            draw.text((x+ox, y+oy), line, font=font_big, fill=(0,0,0,alpha))
+
+        # White main text with slight red tint on edges
+        draw.text((x, y), line, font=font_big, fill=(255,255,255,255))
+
+    # Blinking cursor
+    if char_progress < len(text) and (frame_idx // 7) % 2 == 0 and lines:
         bbox = draw.textbbox((0,0), lines[-1], font=font_big)
-        cx = (w-(bbox[2]-bbox[0]))//2 + (bbox[2]-bbox[0]) + 6
+        cx = (w-(bbox[2]-bbox[0]))//2 + (bbox[2]-bbox[0]) + 7
         cy = text_y + (len(lines)-1)*line_h
-        draw.rectangle([cx, cy, cx+6, cy+70], fill=(220,15,15,255))
+        draw.rectangle([cx, cy, cx+7, cy+74], fill=(220,15,15,255))
 
-    # Branding DARK PSYCHOLOGY abajo
+    # ── Bottom branding
+    # Red bar above brand
+    draw.rectangle([(50, h-160),(w-50, h-153)], fill=(220,15,15,200))
+
     label = "DARK PSYCHOLOGY"
     bbox = draw.textbbox((0,0), label, font=font_label)
     lw = bbox[2]-bbox[0]
     lx = (w-lw)//2
-    draw.text((lx+3, h-115+3), label, font=font_label, fill=(0,0,0,200))
-    draw.text((lx, h-115), label, font=font_label, fill=(210,15,15,245))
+    # Shadow
+    draw.text((lx+3, h-130+3), label, font=font_label, fill=(0,0,0,200))
+    # Main label
+    draw.text((lx, h-130), label, font=font_label, fill=(220,20,20,255))
 
-    # Barra roja inferior
-    draw.rectangle([(60, h-145),(w-60, h-138)], fill=(220,15,15,200))
-
-    # Puntos de progreso
-    dot_r = 9
-    spacing = 30
+    # ── Scene progress dots
+    dot_d = 12
+    spacing = 28
     total_w = total_scenes * spacing
-    dx = (w - total_w)//2
-    dy = h - 70
+    dx = (w - total_w) // 2
+    dy = h - 75
     for s in range(total_scenes):
-        cx_ = dx + s*spacing
-        color = (220,15,15,255) if s == scene_num else (100,100,100,160)
-        draw.ellipse([cx_, dy, cx_+dot_r*2, dy+dot_r*2], fill=color)
+        cx_ = dx + s * spacing
+        if s == scene_num:
+            draw.ellipse([cx_-2, dy-2, cx_+dot_d+2, dy+dot_d+2], fill=(180,10,10,255))
+            draw.ellipse([cx_, dy, cx_+dot_d, dy+dot_d], fill=(220,20,20,255))
+        else:
+            draw.ellipse([cx_, dy, cx_+dot_d, dy+dot_d], fill=(80,80,80,160))
 
     return np.array(img.convert("RGB"))
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  ZOOM
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
+#  ZOOM (Ken Burns effect)
+# ═══════════════════════════════════════════════════════════
 def zoom_frame(base_img, t, duration):
-    zoom = 1.0 + 0.06*(t/duration)
+    # Slight zoom + subtle pan
+    zoom = 1.0 + 0.07 * (t / duration)
+    pan_x = 0.02 * np.sin(2 * np.pi * t / duration)
     w, h = base_img.size
-    nw, nh = int(w/zoom), int(h/zoom)
-    left = (w-nw)//2
-    top = (h-nh)//2
-    return base_img.crop((left,top,left+nw,top+nh)).resize((w,h), Image.LANCZOS)
+    nw, nh = int(w / zoom), int(h / zoom)
+    left = max(0, int((w - nw) / 2 + pan_x * w))
+    top = int((h - nh) // 2)
+    left = min(left, w - nw)
+    return base_img.crop((left, top, left+nw, top+nh)).resize((w, h), Image.LANCZOS)
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 #  TTS
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 async def _synth(text, path):
-    tts = Communicate(text, voice="en-US-GuyNeural", rate="-10%", pitch="-12Hz", volume="+25%")
+    tts = Communicate(text, voice="en-US-GuyNeural", rate="-12%", pitch="-14Hz", volume="+30%")
     await tts.save(path)
 
 def synth_sync(text, path):
     asyncio.run(_synth(text, path))
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  MÚSICA dark ambient variada
-# ═══════════════════════════════════════════════════════════════════
-def get_music(duration=120):
+# ═══════════════════════════════════════════════════════════
+#  DARK AMBIENT MUSIC (generated)
+# ═══════════════════════════════════════════════════════════
+def generate_music(duration=120):
     try:
         sr = 44100
-        t = np.linspace(0, duration, int(sr*duration), dtype=np.float32)
-        base_hz = random.choice([41.2, 46.25, 55.0, 61.74, 36.71])
+        t = np.linspace(0, duration, int(sr * duration), dtype=np.float32)
 
-        music = 0.28 * np.sin(2*np.pi*base_hz*t)
-        music += 0.14 * np.sin(2*np.pi*base_hz*1.5*t)
-        music += 0.09 * np.sin(2*np.pi*base_hz*2.0*t)
-        music += 0.05 * np.sin(2*np.pi*base_hz*3.0*t)
+        # Pick random dark key
+        base_hz = random.choice([41.2, 43.65, 46.25, 55.0, 49.0, 36.71])
 
-        pulse = 0.5 + 0.5*np.sin(2*np.pi*random.uniform(0.06,0.11)*t)
+        # Rich harmonic drone
+        music  = 0.30 * np.sin(2*np.pi*base_hz*t)
+        music += 0.18 * np.sin(2*np.pi*base_hz*1.498*t)   # perfect fifth
+        music += 0.12 * np.sin(2*np.pi*base_hz*1.782*t)   # minor seventh
+        music += 0.08 * np.sin(2*np.pi*base_hz*2.0*t)     # octave
+        music += 0.05 * np.sin(2*np.pi*base_hz*2.997*t)   # second octave fifth
+        music += 0.04 * np.sin(2*np.pi*base_hz*0.5*t)     # sub-bass
+
+        # Breathing pulse
+        pulse_rate = random.uniform(0.06, 0.10)
+        pulse = 0.45 + 0.55 * np.sin(2*np.pi*pulse_rate*t)
         music *= pulse
 
-        shimmer_hz = random.choice([220,330,440,528])
-        music += 0.035 * np.sin(2*np.pi*shimmer_hz*t) * np.sin(2*np.pi*0.2*t)
-        music += 0.07 * np.sin(2*np.pi*28*t) * (0.5+0.5*np.sin(2*np.pi*0.04*t))
+        # Subtle high shimmer
+        shimmer_hz = random.choice([220, 277, 330, 370, 415])
+        shimmer_rate = random.uniform(0.18, 0.28)
+        music += 0.04 * np.sin(2*np.pi*shimmer_hz*t) * np.sin(2*np.pi*shimmer_rate*t)
 
-        noise = np.random.normal(0, 0.012, len(t)).astype(np.float32)
-        music += noise * (0.5+0.5*np.sin(2*np.pi*0.07*t))
+        # Deep sub rumble
+        music += 0.09 * np.sin(2*np.pi*25*t) * (0.4 + 0.6*np.sin(2*np.pi*0.04*t))
 
-        fade = int(sr*3)
-        music[:fade] *= np.linspace(0,1,fade)
-        music[-fade:] *= np.linspace(1,0,fade)
+        # Textured noise layer
+        noise = np.random.normal(0, 0.015, len(t)).astype(np.float32)
+        noise_env = 0.4 + 0.6*np.sin(2*np.pi*0.05*t)
+        music += noise * noise_env
 
-        music = music / (np.max(np.abs(music))+1e-9) * 0.30
-        audio_int = (music*32767).astype(np.int16)
+        # Fade in/out
+        fade_s = int(sr * 4)
+        music[:fade_s] *= np.linspace(0, 1, fade_s)
+        music[-fade_s:] *= np.linspace(1, 0, fade_s)
+
+        # Normalize to 32% volume
+        music = music / (np.max(np.abs(music)) + 1e-9) * 0.32
+        audio_int = (music * 32767).astype(np.int16)
 
         wav_path = "bg_music.wav"
-        with wave.open(wav_path,"w") as wf:
+        with wave.open(wav_path, "w") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sr)
             wf.writeframes(audio_int.tobytes())
-        print("  Music generated OK")
+        print(f"  Music generated OK ({duration}s)")
         return wav_path
     except Exception as e:
         print(f"  Music error: {e}")
         return None
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  BUILD SCENE — frames precalculados (compatible con MoviePy 1.x)
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
+#  BUILD SCENE
+# ═══════════════════════════════════════════════════════════
 def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
     audio = AudioFileClip(audio_path)
     duration = audio.duration + 1.0
     total_frames = int(duration * FPS)
-    reveal_frames = int(FPS * 2.0)
+    reveal_frames = int(FPS * 1.8)
 
-    print(f"    Rendering {total_frames} frames for scene {scene_idx+1}...")
+    print(f"    Rendering {total_frames} frames...")
     frames = []
     for f in range(total_frames):
         t = f / FPS
@@ -418,62 +475,59 @@ def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
         base_arr = np.array(zoomed)
         cp = min(len(text), int(len(text)*(f/reveal_frames))) if f < reveal_frames else len(text)
         frame = render_text_frame(base_arr, text, cp, f, scene_idx, total_scenes)
-        if f < 5:
+        if f < 6:
             frame = glitch_frame(frame, intensity=5)
         frames.append(frame.astype(np.uint8))
 
-    frames_arr = frames  # lista de arrays
-
     def make_frame(t):
-        idx = min(int(t*FPS), len(frames_arr)-1)
-        return frames_arr[idx]
+        return frames[min(int(t*FPS), len(frames)-1)]
 
     clip = VideoClip(make_frame, duration=duration)
     clip = clip.set_audio(audio)
-    return clip.fadein(0.4).fadeout(0.4)
+    return clip.fadein(0.5).fadeout(0.5)
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 #  BUILD VIDEO
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 def build_video(scenes):
     total = len(scenes)
 
-    # Imágenes en paralelo
-    print("\n  Generating all images in parallel...")
+    # Parallel image generation
+    print("\n  Generating images...")
     def gen_img(args):
         i, prompt = args
         return i, generate_image(prompt, i)
-    with ThreadPoolExecutor(max_workers=5) as ex:
+    with ThreadPoolExecutor(max_workers=3) as ex:
         results = list(ex.map(gen_img, [(i, s["prompt"]) for i,s in enumerate(scenes)]))
     img_paths = {i: p for i,p in results}
 
-    # TTS en paralelo
-    print("  Synthesizing all audio in parallel...")
+    # Parallel TTS
+    print("  Generating audio...")
     def gen_audio(args):
         i, text = args
         path = f"audio_{i}.mp3"
         synth_sync(text, path)
         return i, path
-    with ThreadPoolExecutor(max_workers=5) as ex:
+    with ThreadPoolExecutor(max_workers=3) as ex:
         list(ex.map(gen_audio, [(i, s["text"]) for i,s in enumerate(scenes)]))
 
-    # Construir clips
+    # Build clips
     clips = []
     for i, scene in enumerate(scenes):
-        print(f"\n  Building scene {i+1}/{total}")
+        print(f"\n  Scene {i+1}/{total}: {scene['text'][:40]}...")
         base_img = add_vignette(Image.open(img_paths[i]).convert("RGB"))
         clip = build_scene(base_img, f"audio_{i}.mp3", scene["text"], i, total)
         clips.append(clip)
 
     final = concatenate_videoclips(clips, method="compose")
 
-    # Música
-    music_path = get_music(duration=int(final.duration)+5)
+    # Add music
+    music_path = generate_music(duration=int(final.duration) + 5)
     if music_path:
         try:
             music = AudioFileClip(music_path)
-            music = music.subclip(0, min(final.duration, music.duration)).volumex(0.14)
+            music = music.subclip(0, min(final.duration, music.duration)).volumex(0.13)
             mixed = CompositeAudioClip([final.audio, music])
             final = final.set_audio(mixed)
             print("  Music mixed OK")
@@ -483,17 +537,17 @@ def build_video(scenes):
     output = "viral_short.mp4"
     print("\n  Rendering final video...")
     final.write_videofile(
-        output, fps=FPS, codec="libx264",
-        audio_codec="aac", bitrate="12000k",
-        preset="slow", threads=4,
-        ffmpeg_params=["-crf","18"],
+        output, fps=FPS,
+        codec="libx264", audio_codec="aac",
+        bitrate="12000k", preset="slow",
+        threads=4, ffmpeg_params=["-crf","17"],
     )
     return output
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  UPLOAD YOUTUBE
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
+#  YOUTUBE UPLOAD
+# ═══════════════════════════════════════════════════════════
 def upload_to_youtube(video_path, title, description, tags):
     print("\n  Uploading to YouTube...")
     from googleapiclient.discovery import build as yt_build
@@ -509,40 +563,39 @@ def upload_to_youtube(video_path, title, description, tags):
             token_path, scopes=["https://www.googleapis.com/auth/youtube.upload"]
         )
         youtube = yt_build("youtube", "v3", credentials=creds)
-        request = youtube.videos().insert(
+        response = youtube.videos().insert(
             part="snippet,status",
             body={
                 "snippet": {
                     "title": title,
-                    "description": description + "\n\n#darkpsychology #psychology #shorts #mindcontrol #manipulation #brain",
+                    "description": description + "\n\n#darkpsychology #psychology #shorts #mindcontrol #manipulation #brain #mindset",
                     "tags": tags,
                     "categoryId": "22",
                 },
                 "status": {"privacyStatus": "public"},
             },
             media_body=MediaFileUpload(video_path, mimetype="video/mp4", resumable=True),
-        )
-        response = request.execute()
+        ).execute()
         print(f"  UPLOADED: https://www.youtube.com/watch?v={response['id']}")
     finally:
         os.unlink(token_path)
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 #  MAIN
-# ═══════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("="*60)
+    print("=" * 55)
     print("  AUTO YOUTUBE BOT — DARK PSYCHOLOGY SHORTS")
-    print("="*60)
+    print("=" * 55)
 
-    script = generate_script_with_gemini()
-    print(f"\n  Title: {script['title']}")
-    print(f"  Scenes: {len(script['scenes'])}")
+    script = generate_script()
+    print(f"\n  Title  : {script['title']}")
+    print(f"  Scenes : {len(script['scenes'])}")
 
     video = build_video(script["scenes"])
     upload_to_youtube(video, script["title"], script["description"], script["tags"])
 
-    print("\n"+"="*60)
+    print("\n" + "=" * 55)
     print("  DONE!")
-    print("="*60)
+    print("=" * 55)

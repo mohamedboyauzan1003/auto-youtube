@@ -10,25 +10,25 @@ if not hasattr(PIL.Image, "ANTIALIAS"):
 from moviepy.editor import AudioFileClip, concatenate_videoclips, VideoClip
 from moviepy.audio.AudioClip import CompositeAudioClip
 from edge_tts import Communicate
-from concurrent.futures import ThreadPoolExecutor
 
 # ═══════════════════════════════════════════════════════════
 #  CONFIG CENTRAL
 # ═══════════════════════════════════════════════════════════
 W, H       = 1080, 1920
 FPS        = 30
-NUM_SCENES = 10          # minimo 10 escenas = ~35-45s
-MIN_AUDIO_S       = 1.5
-MIN_IMAGE_KB      = 15
+NUM_SCENES = 10
+MIN_AUDIO_S        = 1.5
+MIN_IMAGE_KB       = 15
 MIN_VIDEO_DURATION = 30
 MAX_VIDEO_DURATION = 60
 VOICE              = "en-US-GuyNeural"
 VOICE_RATE         = "-5%"
 VOICE_PITCH        = "-10Hz"
 VOICE_VOLUME       = "+30%"
-IMAGE_RETRIES      = 5
+IMAGE_RETRIES      = 4
 SCRIPT_RETRIES     = 5
 UPLOAD_RETRIES     = 3
+TTS_RETRIES        = 4
 
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
@@ -168,7 +168,6 @@ def generate_script():
                 time.sleep(5)
                 continue
             raw = r.json()["choices"][0]["message"]["content"].strip()
-            # Strip any markdown fences
             raw = raw.replace("```json", "").replace("```", "").strip()
             start = raw.find("{")
             end   = raw.rfind("}") + 1
@@ -177,11 +176,9 @@ def generate_script():
                 continue
             raw    = raw[start:end]
             script = json.loads(raw)
-            # Validate
             if "scenes" not in script or len(script["scenes"]) < 5:
                 log.warning(f"Only {len(script.get('scenes',[]))} scenes, retrying...")
                 continue
-            # Pad to NUM_SCENES if needed
             while len(script["scenes"]) < NUM_SCENES:
                 script["scenes"].append(random.choice(script["scenes"]).copy())
             script["scenes"] = script["scenes"][:NUM_SCENES]
@@ -218,7 +215,8 @@ def fallback_script():
     return base
 
 # ═══════════════════════════════════════════════════════════
-#  IMAGE GENERATION — Pollinations FLUX + validation
+#  IMAGE GENERATION
+#  Pollinations (secuencial, sin saturar) + Hugging Face fallback real
 # ═══════════════════════════════════════════════════════════
 ANIME_STYLES = [
     "makoto shinkai anime style",
@@ -230,6 +228,11 @@ ANIME_STYLES = [
     "cinematic anime concept art",
     "yoji shinkawa dark illustration style",
     "dark anime oil painting style",
+]
+
+HF_MODELS = [
+    "stabilityai/stable-diffusion-xl-base-1.0",
+    "cagliostrolab/animagine-xl-3.1",
 ]
 
 def validate_image(path):
@@ -250,14 +253,16 @@ def validate_image(path):
         return False, str(e)
 
 def generate_image(prompt, index):
-    # Check cache first
-    key       = hashlib.md5(prompt.encode()).hexdigest()[:12]
+    key        = hashlib.md5(prompt.encode()).hexdigest()[:12]
     cache_path = CACHE_DIR / "images" / f"{key}.jpg"
     if cache_path.exists():
-        ok, reason = validate_image(str(cache_path))
+        ok, _ = validate_image(str(cache_path))
         if ok:
             log.info(f"Image {index+1} from cache")
-            return str(cache_path)
+            import shutil
+            out = f"img_{index}.jpg"
+            shutil.copy(str(cache_path), out)
+            return out
 
     style       = random.choice(ANIME_STYLES)
     full_prompt = (
@@ -269,21 +274,39 @@ def generate_image(prompt, index):
     )
     seed = int(time.time()) * (index + 1) + random.randint(10000, 99999)
 
+    # 1) Pollinations — secuencial, un modelo a la vez, con backoff real
     for attempt in range(IMAGE_RETRIES):
-        for model in ["flux", "flux-realism", "turbo"]:
-            path = _try_pollinations(full_prompt, index, seed + attempt * 1337, model)
+        model = ["flux", "turbo", "flux-realism"][attempt % 3]
+        path = _try_pollinations(full_prompt, index, seed + attempt * 1337, model)
+        if path:
+            ok, reason = validate_image(path)
+            if ok:
+                import shutil
+                shutil.copy(path, str(cache_path))
+                log.success(f"Image {index+1} OK ({model}, attempt {attempt+1})")
+                return path
+            log.warning(f"Image {index+1} invalid ({reason})")
+        wait = 4 * (attempt + 1)
+        log.warning(f"Image {index+1} retry in {wait}s...")
+        time.sleep(wait)
+
+    # 2) Hugging Face Inference API — respaldo real con SDXL/animagine
+    hf_token = os.environ.get("HF_API_KEY", "")
+    if hf_token:
+        for hf_model in HF_MODELS:
+            path = _try_huggingface(full_prompt, index, hf_model, hf_token)
             if path:
                 ok, reason = validate_image(path)
                 if ok:
                     import shutil
                     shutil.copy(path, str(cache_path))
-                    log.success(f"Image {index+1} OK ({model}, attempt {attempt+1})")
+                    log.success(f"Image {index+1} OK (HuggingFace {hf_model})")
                     return path
-                else:
-                    log.warning(f"Image {index+1} invalid ({reason}), retrying...")
-        time.sleep(3 * (attempt + 1))
+            time.sleep(3)
+    else:
+        log.warning("HF_API_KEY not set — skipping Hugging Face fallback")
 
-    log.error(f"Image {index+1} all attempts failed — using gradient")
+    log.error(f"Image {index+1} all sources failed — using gradient")
     return _dark_gradient_fallback(index)
 
 def _try_pollinations(prompt, index, seed, model="flux"):
@@ -298,7 +321,7 @@ def _try_pollinations(prompt, index, seed, model="flux"):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer":    "https://pollinations.ai/",
         }
-        r = requests.get(url, timeout=120, headers=headers)
+        r = requests.get(url, timeout=90, headers=headers)
         if r.status_code == 200 and len(r.content) > MIN_IMAGE_KB * 1024:
             path = f"img_{index}.jpg"
             with open(path, "wb") as f:
@@ -310,9 +333,39 @@ def _try_pollinations(prompt, index, seed, model="flux"):
             img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=110, threshold=3))
             img.save(path, quality=98, optimize=True)
             return path
-        log.warning(f"  {model}: status={r.status_code}, size={len(r.content)//1024}KB")
+        log.warning(f"  pollinations({model}): status={r.status_code}, size={len(r.content)//1024}KB")
     except Exception as e:
-        log.warning(f"  {model} error: {e}")
+        log.warning(f"  pollinations({model}) error: {e}")
+    return None
+
+def _try_huggingface(prompt, index, model, token):
+    try:
+        url = f"https://api-inference.huggingface.co/models/{model}"
+        headers = {"Authorization": f"Bearer {token}"}
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "negative_prompt": "lowres, bad anatomy, blurry, watermark, text, signature, deformed",
+                "width": 832,
+                "height": 1216,
+                "num_inference_steps": 28,
+                "guidance_scale": 7.0,
+            },
+            "options": {"wait_for_model": True},
+        }
+        r = requests.post(url, headers=headers, json=payload, timeout=90)
+        if r.status_code == 200 and len(r.content) > MIN_IMAGE_KB * 1024:
+            path = f"img_{index}.jpg"
+            with open(path, "wb") as f:
+                f.write(r.content)
+            img = Image.open(path).convert("RGB").resize((W, H), Image.LANCZOS)
+            img = ImageEnhance.Contrast(img).enhance(1.15)
+            img = ImageEnhance.Sharpness(img).enhance(1.3)
+            img.save(path, quality=98, optimize=True)
+            return path
+        log.warning(f"  huggingface({model}): status={r.status_code}")
+    except Exception as e:
+        log.warning(f"  huggingface({model}) error: {e}")
     return None
 
 def _dark_gradient_fallback(index):
@@ -370,8 +423,8 @@ def get_fonts():
         if os.path.exists(fp):
             try:
                 return (
-                    ImageFont.truetype(fp, 72),  # main
-                    ImageFont.truetype(fp, 38),  # label
+                    ImageFont.truetype(fp, 72),
+                    ImageFont.truetype(fp, 38),
                 )
             except:
                 pass
@@ -380,13 +433,11 @@ def get_fonts():
 
 # ═══════════════════════════════════════════════════════════
 #  TEXT RENDERER — estilo TikTok/CapCut
-#  Palabra por palabra resaltada, no bloques grandes
 # ═══════════════════════════════════════════════════════════
 def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total_scenes):
     img  = Image.fromarray(base_arr.astype(np.uint8)).convert("RGBA")
     w, h = img.size
 
-    # Top gradient
     gt = Image.new("RGBA", (w,h), (0,0,0,0))
     gd = ImageDraw.Draw(gt)
     gh = int(h*0.42)
@@ -395,7 +446,6 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
         gd.line([(0,y),(w,y)], fill=(0,0,0,a))
     img = Image.alpha_composite(img, gt)
 
-    # Bottom gradient
     gb  = Image.new("RGBA", (w,h), (0,0,0,0))
     gd2 = ImageDraw.Draw(gb)
     bh  = int(h*0.20)
@@ -404,10 +454,9 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
         gd2.line([(0,y),(w,y)], fill=(0,0,0,a))
     img = Image.alpha_composite(img, gb)
 
-    draw             = ImageDraw.Draw(img)
-    font_main, font_label = get_fonts()
+    draw                   = ImageDraw.Draw(img)
+    font_main, font_label  = get_fonts()
 
-    # ── TOP: barra roja + título palabra a palabra estilo TikTok ──
     bar_y = 85
     draw.rectangle([(50,bar_y),(w-50,bar_y+7)], fill=(220,15,15,255))
 
@@ -420,7 +469,6 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
 
     for li, line in enumerate(lines):
         line_words = line.split()
-        # Calculate total line width for centering
         total_w_px = 0
         for ww in line_words:
             bb = draw.textbbox((0,0), ww+" ", font=font_main)
@@ -429,32 +477,26 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
         y = text_y + li * line_h
 
         for wi, ww in enumerate(line_words):
-            bb  = draw.textbbox((0,0), ww+" ", font=font_main)
-            ww_ = ww + " "
+            bb   = draw.textbbox((0,0), ww+" ", font=font_main)
+            ww_  = ww + " "
             ww_w = bb[2]-bb[0]
-
-            # Is this the last revealed word? Highlight it
             is_last = (li == last_word_line and wi == len(line_words)-1 and word_progress <= len(words))
 
             if is_last:
-                # Yellow highlight box behind last word
                 pad = 6
                 draw.rounded_rectangle(
                     [x-pad, y-pad, x+ww_w-bb[0]+pad, y+line_h-12+pad],
                     radius=8, fill=(220,15,15,230)
                 )
-                # Shadow
                 for ox,oy in [(3,3),(2,2)]:
                     draw.text((x+ox,y+oy), ww_, font=font_main, fill=(0,0,0,180))
                 draw.text((x,y), ww_, font=font_main, fill=(255,255,255,255))
             else:
-                # Normal word with shadow
                 for ox,oy in [(5,5),(3,3),(1,1)]:
                     draw.text((x+ox,y+oy), ww_, font=font_main, fill=(0,0,0,180))
                 draw.text((x,y), ww_, font=font_main, fill=(255,255,255,255))
             x += ww_w
 
-    # ── BOTTOM: branding ──
     draw.rectangle([(50,h-158),(w-50,h-151)], fill=(220,15,15,200))
     label = "DARK PSYCHOLOGY"
     bb    = draw.textbbox((0,0), label, font=font_label)
@@ -462,7 +504,6 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
     draw.text((lx+3,h-128+3), label, font=font_label, fill=(0,0,0,200))
     draw.text((lx,  h-128),   label, font=font_label, fill=(220,20,20,255))
 
-    # ── Progress dots ──
     dd  = 12
     sp  = 26
     tw  = total_scenes * sp
@@ -479,7 +520,7 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
     return np.array(img.convert("RGB"))
 
 # ═══════════════════════════════════════════════════════════
-#  ZOOM + PAN (Ken Burns)
+#  ZOOM + PAN
 # ═══════════════════════════════════════════════════════════
 def zoom_frame(base_img, t, duration):
     zoom  = 1.0 + 0.06*(t/duration)
@@ -493,41 +534,50 @@ def zoom_frame(base_img, t, duration):
     return base_img.crop((left,top,left+nw,top+nh)).resize((w,h), Image.LANCZOS)
 
 # ═══════════════════════════════════════════════════════════
-#  TTS + validation
+#  TTS — SECUENCIAL (Edge TTS no soporta bien paralelismo)
 # ═══════════════════════════════════════════════════════════
 async def _synth(text, path):
     tts = Communicate(text, voice=VOICE, rate=VOICE_RATE, pitch=VOICE_PITCH, volume=VOICE_VOLUME)
     await tts.save(path)
 
-def synth_sync(text, index):
+def synth_one(text, index):
     key        = hashlib.md5(text.encode()).hexdigest()[:12]
     cache_path = str(CACHE_DIR / "audio" / f"{key}.mp3")
     out_path   = f"audio_{index}.mp3"
 
-    # Use cache if valid
     if Path(cache_path).exists() and Path(cache_path).stat().st_size > 20000:
         import shutil
         shutil.copy(cache_path, out_path)
         log.info(f"Audio {index+1} from cache")
         return out_path
 
-    for attempt in range(3):
+    for attempt in range(TTS_RETRIES):
         try:
+            if Path(out_path).exists():
+                os.remove(out_path)
             asyncio.run(_synth(text, out_path))
             p = Path(out_path)
             if p.exists() and p.stat().st_size > 20000:
                 import shutil
                 shutil.copy(out_path, cache_path)
-                log.success(f"Audio {index+1} OK")
+                log.success(f"Audio {index+1} OK ({p.stat().st_size//1024}KB)")
                 return out_path
-            log.warning(f"Audio {index+1} too small, retrying...")
+            log.warning(f"Audio {index+1} too small ({p.stat().st_size if p.exists() else 0}B), retry {attempt+1}...")
         except Exception as e:
-            log.error(f"TTS attempt {attempt+1}: {e}")
-        time.sleep(2)
+            log.warning(f"Audio {index+1} attempt {attempt+1} error: {e}")
+        time.sleep(2 + attempt)
 
-    log.error(f"Audio {index+1} failed — creating silence")
+    log.error(f"Audio {index+1} failed after {TTS_RETRIES} attempts — creating silence")
     _make_silence(out_path, 3.0)
     return out_path
+
+def synth_all_sequential(scenes):
+    """Genera todo el audio uno detrás de otro — Edge TTS falla si se paraleliza."""
+    paths = {}
+    for i, scene in enumerate(scenes):
+        paths[i] = synth_one(scene["text"], i)
+        time.sleep(0.5)  # pequeño respiro entre llamadas
+    return paths
 
 def _make_silence(path, duration=3.0):
     import struct, wave as wv
@@ -589,7 +639,7 @@ def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
     total_frames  = int(duration * FPS)
     words         = text.split()
     total_words   = len(words)
-    reveal_frames = int(FPS * 1.5)  # Faster word reveal for TikTok pace
+    reveal_frames = int(FPS * 1.5)
 
     log.info(f"  Scene {scene_idx+1}: {total_frames}f / {duration:.1f}s / {total_words}w")
     frames = []
@@ -611,7 +661,7 @@ def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
     return clip.fadein(0.4).fadeout(0.4)
 
 # ═══════════════════════════════════════════════════════════
-#  CHECKLIST before upload
+#  CHECKLIST
 # ═══════════════════════════════════════════════════════════
 def validate_video(path, title, description, tags):
     errors = []
@@ -619,11 +669,14 @@ def validate_video(path, title, description, tags):
         from moviepy.editor import VideoFileClip
         vc = VideoFileClip(path)
         d  = vc.duration
+        has_audio = vc.audio is not None
         vc.close()
         if d < MIN_VIDEO_DURATION:
             errors.append(f"Too short: {d:.1f}s < {MIN_VIDEO_DURATION}s")
         if d > MAX_VIDEO_DURATION:
             errors.append(f"Too long: {d:.1f}s > {MAX_VIDEO_DURATION}s")
+        if not has_audio:
+            errors.append("No audio track in final video")
     except Exception as e:
         errors.append(f"Cannot open video: {e}")
 
@@ -652,34 +705,28 @@ def validate_video(path, title, description, tags):
 def build_video(scenes):
     total = len(scenes)
 
-    # Parallel image generation
-    log.info("Generating images in parallel...")
-    def gen_img(args):
-        i, prompt = args
-        return i, generate_image(prompt, i)
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        results   = list(ex.map(gen_img, [(i,s["prompt"]) for i,s in enumerate(scenes)]))
-    img_paths = {i:p for i,p in results}
+    # Imágenes: secuencial con pequeño respiro entre cada una
+    # (Pollinations rate-limita fuerte si se llama en paralelo)
+    log.info("Generating images sequentially...")
+    img_paths = {}
+    for i, scene in enumerate(scenes):
+        img_paths[i] = generate_image(scene["prompt"], i)
+        time.sleep(1.5)
 
-    # Parallel TTS
-    log.info("Generating audio in parallel...")
-    def gen_audio(args):
-        i, text = args
-        return i, synth_sync(text, i)
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        list(ex.map(gen_audio, [(i,s["text"]) for i,s in enumerate(scenes)]))
+    # Audio: secuencial obligatorio (Edge TTS falla en paralelo)
+    log.info("Generating audio sequentially...")
+    audio_paths = synth_all_sequential(scenes)
 
-    # Build clips
+    # Construir clips
     clips = []
     for i, scene in enumerate(scenes):
         log.info(f"Building scene {i+1}/{total}: {scene['text'][:40]}...")
         base_img = add_vignette(Image.open(img_paths[i]).convert("RGB"))
-        clip     = build_scene(base_img, f"audio_{i}.mp3", scene["text"], i, total)
+        clip     = build_scene(base_img, audio_paths[i], scene["text"], i, total)
         clips.append(clip)
 
     final = concatenate_videoclips(clips, method="compose")
 
-    # Music
     music_path = generate_music(duration=int(final.duration)+5)
     if music_path and Path(music_path).exists():
         try:
@@ -703,7 +750,7 @@ def build_video(scenes):
     return output
 
 # ═══════════════════════════════════════════════════════════
-#  YOUTUBE UPLOAD with retry
+#  YOUTUBE UPLOAD
 # ═══════════════════════════════════════════════════════════
 def upload_to_youtube(video_path, title, description, tags):
     log.info("Uploading to YouTube...")
@@ -749,23 +796,19 @@ def upload_to_youtube(video_path, title, description, tags):
 # ═══════════════════════════════════════════════════════════
 if __name__ == "__main__":
     log.info("="*55)
-    log.info("  AUTO YOUTUBE BOT V2 — DARK PSYCHOLOGY SHORTS")
+    log.info("  AUTO YOUTUBE BOT V3 — DARK PSYCHOLOGY SHORTS")
     log.info("="*55)
 
-    # 1. Generate script
     script = generate_script()
     log.info(f"Title  : {script['title']}")
     log.info(f"Scenes : {len(script['scenes'])}")
 
-    # 2. Build video
     video = build_video(script["scenes"])
 
-    # 3. Validate before upload
     if not validate_video(video, script["title"], script["description"], script["tags"]):
         log.error("Video failed checklist — aborting upload")
         exit(1)
 
-    # 4. Upload
     upload_to_youtube(video, script["title"], script["description"], script["tags"])
 
     log.info("="*55)

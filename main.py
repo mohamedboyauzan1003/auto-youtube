@@ -1,7 +1,17 @@
-import os, asyncio, random, requests, numpy as np, textwrap, json, time, wave, tempfile
+import os
+import asyncio
+import random
+import requests
+import numpy as np
+import textwrap
+import json
+import time
+import wave
+import tempfile
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 import PIL.Image
 
+# Mantener compatibilidad con versiones modernas de Pillow
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
@@ -10,263 +20,143 @@ from moviepy.audio.AudioClip import CompositeAudioClip
 from edge_tts import Communicate
 from concurrent.futures import ThreadPoolExecutor
 
+# Importaciones de Google API para la subida automática
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.auth.transport.requests import Request
+import pickle
+
+# Configuración de Lienzo Vertical Estándar (Shorts/Reels)
 W, H = 1080, 1920
 FPS = 30
 
 # ═══════════════════════════════════════════════════════════
-#  GROQ SCRIPT GENERATOR (gratis, llama-3.3-70b)
-#  Obtén tu key gratis en: https://console.groq.com
+#  1. GENERACIÓN DE GUIONES (GROQ) CON REINTENTOS
 # ═══════════════════════════════════════════════════════════
 def generate_script():
     api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        print("⚠ GROQ_API_KEY no detectada. Usando guion de respaldo.")
+        return fallback_script()
 
     topics = [
         "manipulation tactics people use daily",
         "dark cognitive biases controlling your decisions",
         "subconscious mind tricks you never knew about",
         "body language secrets manipulators exploit",
-        "dark persuasion techniques in advertising",
-        "psychological reasons you cannot say no",
-        "signs someone is gaslighting you right now",
-        "how your ego blinds you from truth",
         "dark truths about human nature nobody says",
-        "hidden reasons people self sabotage success",
-        "psychological tricks narcissists use on you",
-        "how fear silently controls every decision",
-        "dark side of social media on your brain",
-        "why your brain is hardwired for negativity",
-        "psychological power moves of influential leaders",
-        "why intelligent people stay in toxic relationships",
-        "how childhood trauma silently shapes you today",
-        "dark secrets of the world most persuasive people",
-        "why your brain secretly craves drama",
-        "how dopamine addiction is engineered to control you",
-        "the psychology behind why people obey authority",
-        "dark reason why you care what strangers think",
-        "how silence is used as a weapon of control",
-        "psychological signs someone secretly envies you",
-        "why your brain sabotages your own happiness",
     ]
-
     topic = random.choice(topics)
-    print(f"  Topic: {topic}")
+    print(f"🧠 Generando guión en Groq para el tema: {topic}")
 
-    prompt = f"""You are a viral dark psychology YouTube Shorts scriptwriter.
+    prompt = f"""You are an educational psychology scriptwriter.
 Write about: {topic}
-
 Rules:
-- Each scene text: max 12 words, dramatic, dark, with "..." pauses
-- Each image prompt: vivid dark anime art scene, very specific, unique per scene
-- Title: under 60 chars, no emojis, makes people stop scrolling
+- Each scene text: max 12 words, dramatic, with "..." pauses
+- Each image prompt: vivid dark art scene, very specific, unique per scene
+- Title: under 60 chars, no emojis
 
-Return ONLY this raw JSON (no markdown, no backticks, no explanation):
+Return ONLY this raw JSON:
 {{
   "title": "...",
   "description": "...",
-  "tags": ["darkpsychology","psychology","mindcontrol","manipulation","shorts","brain","facts","awareness","secrets","mindset"],
+  "tags": ["psychology","mindset","facts","awareness"],
   "scenes": [
-    {{"text": "...", "prompt": "dark anime art, [unique specific scene], dramatic chiaroscuro, ultra detailed, 8k, no text"}},
-    {{"text": "...", "prompt": "dark anime art, [unique specific scene], moody atmosphere, ultra detailed, 8k, no text"}},
-    {{"text": "...", "prompt": "dark anime art, [unique specific scene], cinematic, ultra detailed, 8k, no text"}},
-    {{"text": "...", "prompt": "dark anime art, [unique specific scene], epic scale, ultra detailed, 8k, no text"}},
-    {{"text": "...", "prompt": "dark anime art, [unique epic final scene], blazing light breaking darkness, ultra detailed, 8k, no text"}}
+    {{"text": "...", "prompt": "dark style art, [unique specific scene], dramatic chiaroscuro, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark style art, [unique specific scene], moody atmosphere, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark style art, [unique specific scene], cinematic, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark style art, [unique specific scene], epic scale, ultra detailed, 8k, no text"}},
+    {{"text": "...", "prompt": "dark style art, [unique epic final scene], blazing light breaking darkness, ultra detailed, 8k, no text"}}
   ]
 }}"""
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 1.0,
+        "temperature": 0.8,
         "max_tokens": 1500,
     }
 
     for attempt in range(3):
         try:
-            r = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30,
-            )
-            print(f"  Groq status: {r.status_code}")
+            r = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30)
             if r.status_code == 429:
                 wait = 10 * (2 ** attempt)
-                print(f"  Rate limit — waiting {wait}s...")
+                print(f"⏳ Rate limit en Groq. Esperando {wait}s...")
                 time.sleep(wait)
                 continue
             if r.status_code != 200:
-                print(f"  Groq error: {r.text[:200]}")
                 break
+            
             raw = r.json()["choices"][0]["message"]["content"].strip()
-            raw = raw.replace("```json", "").replace("```", "").strip()
-            # Extraer solo el JSON si hay texto extra
+            raw = raw.replace("```json", "").replace("
+```", "").strip()
             start = raw.find("{")
             end = raw.rfind("}") + 1
             if start != -1 and end > start:
                 raw = raw[start:end]
-            script = json.loads(raw)
-            print(f"  Groq OK: {script['title']}")
-            return script
+            return json.loads(raw)
         except Exception as e:
-            print(f"  Groq attempt {attempt+1}: {e}")
+            print(f"⚠ Intento Groq {attempt+1} fallido: {e}")
             time.sleep(5)
 
-    print("  Using fallback script.")
     return fallback_script()
 
-
 def fallback_script():
-    options = [
-        {
-            "title": "3 Dark Tricks Used to Manipulate You Daily",
-            "description": "Discover the hidden manipulation tactics used on you every single day.",
-            "tags": ["darkpsychology","manipulation","mindcontrol","psychology","shorts","facts","brain","mindset","secrets","awareness"],
-            "scenes": [
-                {"text": "Every day... someone hijacks your decisions silently.", "prompt": "dark anime art, shadowy puppet master pulling strings on human silhouette, blood red and black, volumetric fog, ultra detailed 8k, no text"},
-                {"text": "Foot-in-the-door... gets you to agree to anything.", "prompt": "dark anime art, massive ancient door opening into infinite void, eerie crimson glow from within, ultra detailed 8k, no text"},
-                {"text": "Artificial scarcity... triggers your deepest panic response.", "prompt": "dark anime art, cracked hourglass with glowing crimson sand draining, dramatic shadows, ultra detailed 8k, no text"},
-                {"text": "Social proof... makes you copy others like a puppet.", "prompt": "dark anime art, vast crowd of shadowy identical figures, one single glowing silhouette standing apart, ultra detailed 8k, no text"},
-                {"text": "Now you see the trick... you can finally break free.", "prompt": "dark anime art, lone warrior figure shattering dark chains, explosive golden light breaking through darkness, epic cinematic, ultra detailed 8k, no text"},
-            ],
-        },
-        {
-            "title": "Signs Someone Is Secretly Manipulating You",
-            "description": "These hidden signs reveal dark psychology being used against you.",
-            "tags": ["manipulation","darkpsychology","toxicpeople","mindcontrol","psychology","awareness","shorts","mentalhealth","brain","secrets"],
-            "scenes": [
-                {"text": "They make you feel guilty... for their mistakes.", "prompt": "dark anime art, cloaked figure placing invisible crushing weight on kneeling person, dark crimson energy, ultra detailed 8k, no text"},
-                {"text": "Slowly they isolate you... cutting every connection.", "prompt": "dark anime art, person reaching out through glass prison walls, hands of shadows pulling them back, ultra detailed 8k, no text"},
-                {"text": "Gaslighting rewrites your reality... making you doubt yourself.", "prompt": "dark anime art, infinite hall of cracked mirrors each showing different distorted reflection, violet and red glow, ultra detailed 8k, no text"},
-                {"text": "Love bombing then silence... the cycle of control.", "prompt": "dark anime art, beautiful roses blooming then violently transforming to black thorns with crimson drops, ultra detailed 8k, no text"},
-                {"text": "Recognizing this pattern... is your first act of freedom.", "prompt": "dark anime art, figure standing tall breaking invisible puppet strings, brilliant golden dawn light behind them, ultra detailed 8k, no text"},
-            ],
-        },
-        {
-            "title": "Your Brain Deceives You Every Single Day",
-            "description": "The hidden lies your brain tells you that shape your entire reality.",
-            "tags": ["brain","psychology","mindcontrol","darkpsychology","facts","shorts","mindset","consciousness","awareness","secrets"],
-            "scenes": [
-                {"text": "Your brain filters 99 percent of reality... to protect you.", "prompt": "dark anime art, glowing translucent human brain suspended in cosmic void, electric synapses firing like lightning, ultra detailed 8k, no text"},
-                {"text": "Confirmation bias... traps you in a prison of false beliefs.", "prompt": "dark anime art, massive eye with narrow tunnel vision, shadowy distorted figures lurking outside the view, ultra detailed 8k, no text"},
-                {"text": "Your memories are fiction... rewritten every time you recall them.", "prompt": "dark anime art, antique film reel melting and distorting, frames changing as they fall into darkness, ultra detailed 8k, no text"},
-                {"text": "Dunning-Kruger... the less you know, the more confident you feel.", "prompt": "dark anime art, arrogant figure standing triumphantly at peak, completely unaware of endless abyss below, ultra detailed 8k, no text"},
-                {"text": "See the lies clearly... and your mind becomes truly free.", "prompt": "dark anime art, figure meditating with glowing aura, mental chains dissolving into pure cosmic light, ultra detailed 8k, no text"},
-            ],
-        },
-        {
-            "title": "How Fear Controls Every Decision You Make",
-            "description": "Fear is silently running your life. Here is how to take back control.",
-            "tags": ["fear","darkpsychology","psychology","mindcontrol","shorts","brain","mindset","facts","awareness","secrets"],
-            "scenes": [
-                {"text": "Fear was never meant... to control your entire life.", "prompt": "dark anime art, massive shadowy fear entity looming over tiny human figure, blood red sky, ultra detailed 8k, no text"},
-                {"text": "Your amygdala fires... before your logic can respond.", "prompt": "dark anime art, glowing brain cross-section, one section burning red overriding all others, ultra detailed 8k, no text"},
-                {"text": "Fear of rejection... keeps you small and silent forever.", "prompt": "dark anime art, person frozen in place surrounded by judging shadow crowd, ultra detailed 8k, no text"},
-                {"text": "Comfort zone is a prison... built entirely from fear.", "prompt": "dark anime art, person inside transparent sphere watching free world outside, crimson chains on wrists, ultra detailed 8k, no text"},
-                {"text": "Face the fear once... and it loses all its power.", "prompt": "dark anime art, warrior walking fearlessly into storm of shadow monsters, golden aura shield, ultra detailed 8k, no text"},
-            ],
-        },
-        {
-            "title": "Why Narcissists Always Target the Strongest People",
-            "description": "Narcissists do not pick weak targets. They pick the most empathetic ones.",
-            "tags": ["narcissist","darkpsychology","toxicpeople","manipulation","psychology","shorts","mentalhealth","awareness","brain","secrets"],
-            "scenes": [
-                {"text": "Narcissists do not want weak prey... they want your strength.", "prompt": "dark anime art, elegant predator circling glowing empathetic figure in darkness, ultra detailed 8k, no text"},
-                {"text": "Your empathy is the weapon... they use against you.", "prompt": "dark anime art, glowing heart being slowly drained by dark tendrils, ultra detailed 8k, no text"},
-                {"text": "Love bombing is their trap... set before you see it.", "prompt": "dark anime art, beautiful golden cage with roses outside, dark figure watching from shadows, ultra detailed 8k, no text"},
-                {"text": "Devaluation begins... the moment they feel secure.", "prompt": "dark anime art, bright star being slowly dimmed by encroaching dark clouds, ultra detailed 8k, no text"},
-                {"text": "Leaving a narcissist... is the strongest thing you do.", "prompt": "dark anime art, person breaking free from invisible chains into brilliant sunrise, ultra detailed 8k, no text"},
-            ],
-        },
-    ]
-    return random.choice(options)
-
+    return {
+        "title": "Your Brain Deceives You Every Single Day",
+        "description": "The hidden lies your brain tells you.",
+        "tags": ["brain","psychology","facts"],
+        "scenes": [
+            {"text": "Your brain filters 99 percent of reality... to protect you.", "prompt": "dark art style, glowing human brain suspended in cosmic void, ultra detailed 8k"},
+            {"text": "Confirmation bias... traps you in a prison of false beliefs.", "prompt": "dark art style, massive eye with narrow tunnel vision, ultra detailed 8k"},
+            {"text": "Your memories are fiction... rewritten every time you recall them.", "prompt": "dark art style, antique film reel melting into darkness, ultra detailed 8k"},
+            {"text": "The less you know... the more confident your brain feels.", "prompt": "dark art style, figure standing triumphantly at a peak, ultra detailed 8k"},
+            {"text": "See the lies clearly... and your mind becomes truly free.", "prompt": "dark art style, figure breaking mental chains into pure light, ultra detailed 8k"},
+        ],
+    }
 
 # ═══════════════════════════════════════════════════════════
-#  IMAGE GENERATION — Pollinations FLUX
+#  2. GENERACIÓN DE IMÁGENES (POLLINATIONS) + POST-PROCESO
 # ═══════════════════════════════════════════════════════════
-ANIME_STYLES = [
-    "makoto shinkai anime style",
-    "studio mappa dark anime art",
-    "demon slayer kimetsu no yaiba art style",
-    "attack on titan dark cinematic anime",
-    "jujutsu kaisen dark aesthetic",
-    "dark fantasy anime illustration",
-    "cinematic anime concept art",
-    "yoji shinkawa dark illustration style",
-    "dark anime oil painting style",
-]
+ANIME_STYLES = ["attack on titan dark cinematic anime", "jujutsu kaisen dark aesthetic", "dark fantasy anime illustration"]
 
 def generate_image(prompt, index):
-    print(f"  Image {index+1}...")
     style = random.choice(ANIME_STYLES)
     seed = int(time.time()) * (index+1) + random.randint(10000, 99999)
-
-    full_prompt = (
-        f"{style}, {prompt}, "
-        f"masterpiece, best quality, ultra detailed, 8k resolution, "
-        f"dramatic cinematic lighting, deep rich shadows, "
-        f"professional digital art, "
-        f"no watermark, no text, no signature, vertical portrait composition"
-    )
+    full_prompt = f"{style}, {prompt}, masterpiece, best quality, ultra detailed, 8k, no text, vertical composition"
 
     for model in ["flux", "flux-realism", "turbo"]:
-        path = _try_pollinations(full_prompt, index, seed, model)
-        if path:
-            return path
-        seed += 1337
+        try:
+            encoded = requests.utils.quote(full_prompt)
+            url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&seed={seed}&model={model}&nologo=true&enhance=true"
+            r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code == 200 and len(r.content) > 15000:
+                path = f"img_{index}.jpg"
+                with open(path, "wb") as f:
+                    f.write(r.content)
+                
+                # Post-procesado estético cinematográfico
+                img = Image.open(path).convert("RGB").resize((W, H), Image.LANCZOS)
+                img = ImageEnhance.Contrast(img).enhance(1.2)
+                img = ImageEnhance.Sharpness(img).enhance(1.5)
+                img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
+                img.save(path, quality=98, optimize=True)
+                return path
+        except Exception as e:
+            print(f"⚠ Fallo con modelo {model} en imagen {index}: {e}")
         time.sleep(2)
 
-    return _dark_gradient_fallback(index)
-
-def _try_pollinations(prompt, index, seed, model="flux"):
-    try:
-        encoded = requests.utils.quote(prompt)
-        url = (
-            f"https://image.pollinations.ai/prompt/{encoded}"
-            f"?width=1080&height=1920&seed={seed}"
-            f"&model={model}&nologo=true&enhance=true"
-        )
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://pollinations.ai/",
-        }
-        r = requests.get(url, timeout=120, headers=headers)
-        if r.status_code == 200 and len(r.content) > 15000:
-            path = f"img_{index}.jpg"
-            with open(path, "wb") as f:
-                f.write(r.content)
-            img = Image.open(path).convert("RGB").resize((W, H), Image.LANCZOS)
-            img = ImageEnhance.Contrast(img).enhance(1.2)
-            img = ImageEnhance.Sharpness(img).enhance(1.5)
-            img = ImageEnhance.Color(img).enhance(1.1)
-            img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
-            img.save(path, quality=98, optimize=True)
-            print(f"  Image {index+1} OK ({model})")
-            return path
-        else:
-            print(f"  {model}: status={r.status_code}, size={len(r.content)}")
-    except Exception as e:
-        print(f"  {model} error: {e}")
-    return None
-
-def _dark_gradient_fallback(index):
-    img = Image.new("RGB", (W, H))
-    draw = ImageDraw.Draw(img)
-    colors = [(5,2,12),(15,5,25),(8,3,18),(20,8,35)]
-    c = random.choice(colors)
-    for y in range(H):
-        draw.line([(0,y),(W,y)], fill=(int(c[0]+40*(y/H)), int(c[1]+10*(y/H)), int(c[2]+60*(y/H))))
+    # Fallback si falla la API de imagen
+    img = Image.new("RGB", (W, H), (15, 5, 25))
     path = f"img_{index}.jpg"
     img.save(path)
     return path
 
-
 # ═══════════════════════════════════════════════════════════
-#  VIGNETTE
+#  3. EFECTOS VISUALES Y DISEÑO DE SUBTÍTULOS
 # ═══════════════════════════════════════════════════════════
 def add_vignette(img):
     w, h = img.size
@@ -278,10 +168,6 @@ def add_vignette(img):
         draw.ellipse([i, i, w-i, h-i], fill=alpha)
     return Image.composite(img, Image.new("RGB", (w, h), (0,0,0)), mask)
 
-
-# ═══════════════════════════════════════════════════════════
-#  GLITCH
-# ═══════════════════════════════════════════════════════════
 def glitch_frame(arr, intensity=4):
     img = arr.copy()
     h, w = img.shape[:2]
@@ -299,315 +185,195 @@ def glitch_frame(arr, intensity=4):
     img[:,:,2] = np.roll(img[:,:,2], -s, axis=1)
     return img
 
-
-# ═══════════════════════════════════════════════════════════
-#  FONTS
-# ═══════════════════════════════════════════════════════════
 def get_fonts():
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "C:\\Windows\\Fonts\\arialbd.ttf"
     ]
     for fp in font_paths:
         if os.path.exists(fp):
-            try:
-                return (
-                    ImageFont.truetype(fp, 76),
-                    ImageFont.truetype(fp, 40),
-                    ImageFont.truetype(fp, 34),
-                )
-            except:
-                pass
+            return ImageFont.truetype(fp, 76), ImageFont.truetype(fp, 40)
     d = ImageFont.load_default()
-    return d, d, d
+    return d, d
 
-
-# ═══════════════════════════════════════════════════════════
-#  TEXT RENDERER
-# ═══════════════════════════════════════════════════════════
 def render_text_frame(base_arr, text, char_progress, frame_idx, scene_num, total_scenes):
     img = Image.fromarray(base_arr.astype(np.uint8)).convert("RGBA")
     w, h = img.size
-
-    # Top gradient
-    grad_top = Image.new("RGBA", (w, h), (0,0,0,0))
-    gd = ImageDraw.Draw(grad_top)
-    top_h = int(h * 0.45)
-    for y in range(top_h):
-        a = int(200 * (1 - y/top_h) ** 1.1)
-        gd.line([(0,y),(w,y)], fill=(0,0,0,a))
-    img = Image.alpha_composite(img, grad_top)
-
-    # Bottom gradient
-    grad_bot = Image.new("RGBA", (w, h), (0,0,0,0))
-    gd2 = ImageDraw.Draw(grad_bot)
-    bot_h = int(h * 0.18)
-    for y in range(h - bot_h, h):
-        a = int(220 * ((y-(h-bot_h))/bot_h) ** 1.0)
-        gd2.line([(0,y),(w,y)], fill=(0,0,0,a))
-    img = Image.alpha_composite(img, grad_bot)
-
     draw = ImageDraw.Draw(img)
-    font_big, font_label, font_small = get_fonts()
+    font_big, font_label = get_fonts()
 
-    # Top red bar
+    # Barra roja superior estética
     bar_y = 90
     draw.rectangle([(50, bar_y),(w-50, bar_y+8)], fill=(220,15,15,255))
 
-    # Typewriter text
+    # Efecto máquina de escribir en subtítulos
     partial = text[:char_progress]
     lines = textwrap.wrap(partial, width=15)
-    line_h = 95
     text_y = bar_y + 28
 
     for i, line in enumerate(lines):
         bbox = draw.textbbox((0,0), line, font=font_big)
         tw = bbox[2]-bbox[0]
         x = (w-tw)//2
-        y = text_y + i*line_h
-        for ox,oy,alpha in [(8,8,140),(5,5,160),(3,3,180),(1,1,200)]:
-            draw.text((x+ox,y+oy), line, font=font_big, fill=(0,0,0,alpha))
+        y = text_y + i*95
+        draw.text((x+3,y+3), line, font=font_big, fill=(0,0,0,200)) # Sombra
         draw.text((x,y), line, font=font_big, fill=(255,255,255,255))
-
-    # Blinking cursor
-    if char_progress < len(text) and (frame_idx//7)%2==0 and lines:
-        bbox = draw.textbbox((0,0), lines[-1], font=font_big)
-        cx = (w-(bbox[2]-bbox[0]))//2 + (bbox[2]-bbox[0]) + 7
-        cy = text_y + (len(lines)-1)*line_h
-        draw.rectangle([cx,cy,cx+7,cy+74], fill=(220,15,15,255))
-
-    # Bottom branding
-    draw.rectangle([(50,h-160),(w-50,h-153)], fill=(220,15,15,200))
-    label = "DARK PSYCHOLOGY"
-    bbox = draw.textbbox((0,0), label, font=font_label)
-    lw = bbox[2]-bbox[0]
-    lx = (w-lw)//2
-    draw.text((lx+3,h-130+3), label, font=font_label, fill=(0,0,0,200))
-    draw.text((lx,h-130), label, font=font_label, fill=(220,20,20,255))
-
-    # Progress dots
-    dot_d = 12
-    spacing = 28
-    total_w = total_scenes * spacing
-    dx = (w-total_w)//2
-    dy = h-75
-    for s in range(total_scenes):
-        cx_ = dx + s*spacing
-        if s == scene_num:
-            draw.ellipse([cx_-2,dy-2,cx_+dot_d+2,dy+dot_d+2], fill=(180,10,10,255))
-            draw.ellipse([cx_,dy,cx_+dot_d,dy+dot_d], fill=(220,20,20,255))
-        else:
-            draw.ellipse([cx_,dy,cx_+dot_d,dy+dot_d], fill=(80,80,80,160))
 
     return np.array(img.convert("RGB"))
 
-
-# ═══════════════════════════════════════════════════════════
-#  ZOOM (Ken Burns)
-# ═══════════════════════════════════════════════════════════
 def zoom_frame(base_img, t, duration):
     zoom = 1.0 + 0.07*(t/duration)
-    pan_x = 0.02 * np.sin(2*np.pi*t/duration)
     w, h = base_img.size
     nw, nh = int(w/zoom), int(h/zoom)
-    left = max(0, min(int((w-nw)/2 + pan_x*w), w-nw))
+    left = (w-nw)//2
     top = (h-nh)//2
     return base_img.crop((left,top,left+nw,top+nh)).resize((w,h), Image.LANCZOS)
 
-
 # ═══════════════════════════════════════════════════════════
-#  TTS
+#  4. SÍNTESIS DE AUDIO (VOZ Y MÚSICA DE FONDO)
 # ═══════════════════════════════════════════════════════════
 async def _synth(text, path):
-    tts = Communicate(text, voice="en-US-GuyNeural", rate="-12%", pitch="-14Hz", volume="+30%")
+    tts = Communicate(text, voice="en-US-GuyNeural", rate="-10%", pitch="-12Hz", volume="+30%")
     await tts.save(path)
 
 def synth_sync(text, path):
     asyncio.run(_synth(text, path))
 
-
-# ═══════════════════════════════════════════════════════════
-#  DARK AMBIENT MUSIC
-# ═══════════════════════════════════════════════════════════
 def generate_music(duration=120):
-    try:
-        sr = 44100
-        t = np.linspace(0, duration, int(sr*duration), dtype=np.float32)
-        base_hz = random.choice([41.2, 43.65, 46.25, 55.0, 49.0, 36.71])
-
-        music  = 0.30 * np.sin(2*np.pi*base_hz*t)
-        music += 0.18 * np.sin(2*np.pi*base_hz*1.498*t)
-        music += 0.12 * np.sin(2*np.pi*base_hz*1.782*t)
-        music += 0.08 * np.sin(2*np.pi*base_hz*2.0*t)
-        music += 0.05 * np.sin(2*np.pi*base_hz*2.997*t)
-        music += 0.04 * np.sin(2*np.pi*base_hz*0.5*t)
-
-        pulse = 0.45 + 0.55*np.sin(2*np.pi*random.uniform(0.06,0.10)*t)
-        music *= pulse
-
-        shimmer_hz = random.choice([220,277,330,370,415])
-        music += 0.04 * np.sin(2*np.pi*shimmer_hz*t) * np.sin(2*np.pi*random.uniform(0.18,0.28)*t)
-        music += 0.09 * np.sin(2*np.pi*25*t) * (0.4+0.6*np.sin(2*np.pi*0.04*t))
-
-        noise = np.random.normal(0, 0.015, len(t)).astype(np.float32)
-        music += noise * (0.4+0.6*np.sin(2*np.pi*0.05*t))
-
-        fade_s = int(sr*4)
-        music[:fade_s] *= np.linspace(0,1,fade_s)
-        music[-fade_s:] *= np.linspace(1,0,fade_s)
-        music = music / (np.max(np.abs(music))+1e-9) * 0.32
-        audio_int = (music*32767).astype(np.int16)
-
-        wav_path = "bg_music.wav"
-        with wave.open(wav_path,"w") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sr)
-            wf.writeframes(audio_int.tobytes())
-        print(f"  Music generated OK ({duration}s)")
-        return wav_path
-    except Exception as e:
-        print(f"  Music error: {e}")
-        return None
-
+    sr = 44100
+    t = np.linspace(0, duration, int(sr*duration), dtype=np.float32)
+    music = 0.25 * np.sin(2*np.pi*43.65*t) # Tono oscuro de fondo (F1)
+    pulse = 0.5 + 0.5*np.sin(2*np.pi*0.08*t)
+    music *= pulse
+    audio_int = (music*32767).astype(np.int16)
+    wav_path = "bg_ambient_music.wav"
+    with wave.open(wav_path,"w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(audio_int.tobytes())
+    return wav_path
 
 # ═══════════════════════════════════════════════════════════
-#  BUILD SCENE
+#  5. COMPOSICIÓN MULTIMEDIA Y MONTAJE CON MOVIEPY
 # ═══════════════════════════════════════════════════════════
 def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
     audio = AudioFileClip(audio_path)
-    duration = audio.duration + 1.0
+    duration = audio.duration + 0.8
     total_frames = int(duration * FPS)
-    reveal_frames = int(FPS * 1.8)
+    reveal_frames = int(FPS * 1.5)
 
-    print(f"    Rendering {total_frames} frames...")
     frames = []
     for f in range(total_frames):
         t = f / FPS
         zoomed = zoom_frame(base_img, t, duration)
-        base_arr = np.array(zoomed)
         cp = min(len(text), int(len(text)*(f/reveal_frames))) if f < reveal_frames else len(text)
-        frame = render_text_frame(base_arr, text, cp, f, scene_idx, total_scenes)
-        if f < 6:
-            frame = glitch_frame(frame, intensity=5)
+        frame = render_text_frame(np.array(zoomed), text, cp, f, scene_idx, total_scenes)
+        if f < 5: # Glitch inicial de transición
+            frame = glitch_frame(frame, intensity=4)
         frames.append(frame.astype(np.uint8))
 
-    def make_frame(t):
-        return frames[min(int(t*FPS), len(frames)-1)]
+    clip = VideoClip(lambda t: frames[min(int(t*FPS), len(frames)-1)], duration=duration)
+    return clip.set_audio(audio)
 
-    clip = VideoClip(make_frame, duration=duration)
-    clip = clip.set_audio(audio)
-    return clip.fadein(0.5).fadeout(0.5)
-
-
-# ═══════════════════════════════════════════════════════════
-#  BUILD VIDEO
-# ═══════════════════════════════════════════════════════════
 def build_video(scenes):
     total = len(scenes)
-
-    print("\n  Generating images in parallel...")
-    def gen_img(args):
-        i, prompt = args
-        return i, generate_image(prompt, i)
+    print("🎨 Descargando imágenes y voces en paralelo...")
+    
     with ThreadPoolExecutor(max_workers=3) as ex:
-        results = list(ex.map(gen_img, [(i,s["prompt"]) for i,s in enumerate(scenes)]))
-    img_paths = {i:p for i,p in results}
+        img_results = list(ex.map(lambda x: (x[0], generate_image(x[1]["prompt"], x[0])), enumerate(scenes)))
+    img_paths = {i:p for i,p in img_results}
 
-    print("  Generating audio in parallel...")
-    def gen_audio(args):
-        i, text = args
-        path = f"audio_{i}.mp3"
-        synth_sync(text, path)
-        return i, path
     with ThreadPoolExecutor(max_workers=3) as ex:
-        list(ex.map(gen_audio, [(i,s["text"]) for i,s in enumerate(scenes)]))
+        ex.map(lambda x: synth_sync(x[1]["text"], f"audio_{x[0]}.mp3"), enumerate(scenes))
 
     clips = []
     for i, scene in enumerate(scenes):
-        print(f"\n  Scene {i+1}/{total}: {scene['text'][:45]}...")
         base_img = add_vignette(Image.open(img_paths[i]).convert("RGB"))
-        clip = build_scene(base_img, f"audio_{i}.mp3", scene["text"], i, total)
-        clips.append(clip)
+        clips.append(build_scene(base_img, f"audio_{i}.mp3", scene["text"], i, total))
 
     final = concatenate_videoclips(clips, method="compose")
-
+    
     music_path = generate_music(duration=int(final.duration)+5)
-    if music_path:
-        try:
-            music = AudioFileClip(music_path)
-            music = music.subclip(0, min(final.duration, music.duration)).volumex(0.13)
-            mixed = CompositeAudioClip([final.audio, music])
-            final = final.set_audio(mixed)
-            print("  Music mixed OK")
-        except Exception as e:
-            print(f"  Music mix error: {e}")
+    music = AudioFileClip(music_path).subclip(0, final.duration).volumex(0.12)
+    final = final.set_audio(CompositeAudioClip([final.audio, music]))
 
-    output = "viral_short.mp4"
-    print("\n  Rendering final video...")
-    final.write_videofile(
-        output, fps=FPS, codec="libx264",
-        audio_codec="aac", bitrate="12000k",
-        preset="slow", threads=4,
-        ffmpeg_params=["-crf","17"],
-    )
+    output = "final_short.mp4"
+    final.write_videofile(output, fps=FPS, codec="libx264", audio_codec="aac", bitrate="8000k", preset="superfast", logger=None)
     return output
 
+# ═══════════════════════════════════════════════════════════
+#  6. AUTOMATIZACIÓN DE SUBIDA A YOUTUBE SHORTS
+# ═══════════════════════════════════════════════════════════
+def upload_to_youtube(video_path, metadata):
+    print("🚀 Iniciando proceso de subida automática a YouTube...")
+    SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+    creds = None
+    
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+            
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not os.path.exists('client_secrets.json'):
+                raise FileNotFoundError("❌ Falta 'client_secrets.json'. Consíguelo en Google Cloud Console.")
+            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open('token.pickle', 'wb') as token:
+            pickle.load(token) if False else pickle.dump(creds, token)
+
+    youtube = build('youtube', 'v3', credentials=creds)
+
+    title = metadata.get("title", "Psychology Fact")
+    if "#shorts" not in title.lower():
+        title = f"{title[:50]} #shorts"
+
+    body = {
+        'snippet': {
+            'title': title,
+            'description': metadata.get("description", "") + "\n\n#shorts #psychology #mindset",
+            'tags': metadata.get("tags", ["shorts", "psychology"]),
+            'categoryId': '27' # Categoría: Educación
+        },
+        'status': {
+            'privacyStatus': 'public', # Cambiar a 'unlisted' o 'private' si quieres revisar antes
+            'selfDeclaredMadeForKids': False
+        }
+    }
+
+    media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype='video/mp4')
+    request = youtube.videos().insert(part=','.join(body.keys()), body=body, media_body=media)
+
+    print(f"📦 Subiendo '{title}'...")
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f"   -> Progreso: {int(status.progress() * 100)}%")
+    
+    print(f"🎉 ¡Vídeo subido con éxito! ID del vídeo: {response['id']}")
+    return response['id']
 
 # ═══════════════════════════════════════════════════════════
-#  YOUTUBE UPLOAD
-# ═══════════════════════════════════════════════════════════
-def upload_to_youtube(video_path, title, description, tags):
-    print("\n  Uploading to YouTube...")
-    from googleapiclient.discovery import build as yt_build
-    from googleapiclient.http import MediaFileUpload
-    from google.oauth2.credentials import Credentials
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
-        tf.write(os.environ["TOKEN_JSON"])
-        token_path = tf.name
-
-    try:
-        creds = Credentials.from_authorized_user_file(
-            token_path, scopes=["https://www.googleapis.com/auth/youtube.upload"]
-        )
-        youtube = yt_build("youtube", "v3", credentials=creds)
-        response = youtube.videos().insert(
-            part="snippet,status",
-            body={
-                "snippet": {
-                    "title": title,
-                    "description": description + "\n\n#darkpsychology #psychology #shorts #mindcontrol #manipulation #brain #mindset",
-                    "tags": tags,
-                    "categoryId": "22",
-                },
-                "status": {"privacyStatus": "public"},
-            },
-            media_body=MediaFileUpload(video_path, mimetype="video/mp4", resumable=True),
-        ).execute()
-        print(f"  UPLOADED: https://www.youtube.com/watch?v={response['id']}")
-    finally:
-        os.unlink(token_path)
-
-
-# ═══════════════════════════════════════════════════════════
-#  MAIN
+#  7. BLOQUE DE ORQUESTACIÓN PRINCIPAL
 # ═══════════════════════════════════════════════════════════
 if __name__ == "__main__":
-    print("="*55)
-    print("  AUTO YOUTUBE BOT — DARK PSYCHOLOGY SHORTS")
-    print("="*55)
-
+    print("🤖 === INICIANDO PIPELINE TOTALMENTE AUTOMATIZADO ===")
+    
+    # Paso 1: Generar Guión Inteligente
     script = generate_script()
-    print(f"\n  Title  : {script['title']}")
-    print(f"  Scenes : {len(script['scenes'])}")
-
-    video = build_video(script["scenes"])
-    upload_to_youtube(video, script["title"], script["description"], script["tags"])
-
-    print("\n"+"="*55)
-    print("  DONE!")
-    print("="*55)
-
-
+    print(f"📝 Guión listo: {script['title']}")
+    
+    # Paso 2: Crear el Archivo de Video Completo
+    video_file = build_video(script["scenes"])
+    print(f"✅ Video renderizado con éxito en: {video_file}")
+    
+    # Paso 3: Subir a YouTube Directamente
+    try:
+        upload_to_youtube(video_file, script)
+    except Exception as e:
+        print(f"❌ Error crítico al intentar subir a YouTube: {e}")
+        print("💾 El vídeo se ha guardado localmente en 'final_short.mp4' para que no lo pierdas.")

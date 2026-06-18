@@ -540,16 +540,34 @@ async def _synth(text, path):
     tts = Communicate(text, voice=VOICE, rate=VOICE_RATE, pitch=VOICE_PITCH, volume=VOICE_VOLUME)
     await tts.save(path)
 
+def _audio_duration_ok(path, text):
+    """Valida por duración real, no por peso de archivo (mucho más fiable)."""
+    try:
+        from moviepy.editor import AudioFileClip
+        clip = AudioFileClip(path)
+        dur  = clip.duration
+        clip.close()
+        word_count   = max(1, len(text.split()))
+        expected_min = max(MIN_AUDIO_S, word_count / 4.0)
+        if dur < expected_min * 0.5:
+            return False, dur
+        return True, dur
+    except Exception:
+        return False, 0
+
 def synth_one(text, index):
     key        = hashlib.md5(text.encode()).hexdigest()[:12]
     cache_path = str(CACHE_DIR / "audio" / f"{key}.mp3")
     out_path   = f"audio_{index}.mp3"
+    min_bytes  = 8000  # ~3KB/s es el mínimo plausible para MP3 de voz
 
-    if Path(cache_path).exists() and Path(cache_path).stat().st_size > 20000:
-        import shutil
-        shutil.copy(cache_path, out_path)
-        log.info(f"Audio {index+1} from cache")
-        return out_path
+    if Path(cache_path).exists() and Path(cache_path).stat().st_size > min_bytes:
+        ok, dur = _audio_duration_ok(cache_path, text)
+        if ok:
+            import shutil
+            shutil.copy(cache_path, out_path)
+            log.info(f"Audio {index+1} from cache ({dur:.1f}s)")
+            return out_path
 
     for attempt in range(TTS_RETRIES):
         try:
@@ -557,12 +575,17 @@ def synth_one(text, index):
                 os.remove(out_path)
             asyncio.run(_synth(text, out_path))
             p = Path(out_path)
-            if p.exists() and p.stat().st_size > 20000:
+            if not p.exists() or p.stat().st_size < min_bytes:
+                log.warning(f"Audio {index+1} too small ({p.stat().st_size if p.exists() else 0}B), retry {attempt+1}...")
+                time.sleep(2 + attempt)
+                continue
+            ok, dur = _audio_duration_ok(out_path, text)
+            if ok:
                 import shutil
                 shutil.copy(out_path, cache_path)
-                log.success(f"Audio {index+1} OK ({p.stat().st_size//1024}KB)")
+                log.success(f"Audio {index+1} OK ({p.stat().st_size//1024}KB, {dur:.1f}s)")
                 return out_path
-            log.warning(f"Audio {index+1} too small ({p.stat().st_size if p.exists() else 0}B), retry {attempt+1}...")
+            log.warning(f"Audio {index+1} duration too short ({dur:.1f}s for {len(text.split())} words), retry {attempt+1}...")
         except Exception as e:
             log.warning(f"Audio {index+1} attempt {attempt+1} error: {e}")
         time.sleep(2 + attempt)

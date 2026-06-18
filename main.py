@@ -610,6 +610,4 @@ if __name__ == "__main__":
     print("  DONE!")
     print("="*55)
 
-Learn more(opens in new tab)
 
-|███████▍ | 586/794 [00:23<00:14, 14.73it/s, now=None] t: 74%|███████▍ | 588/794 [00:23<00:13,

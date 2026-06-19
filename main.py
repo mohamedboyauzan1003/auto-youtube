@@ -119,23 +119,34 @@ def generate_script():
     log.info(f"Topic: {topic}")
 
     prompt = (
-        "You are a viral dark psychology YouTube Shorts scriptwriter.\n"
+        "You are a viral dark psychology YouTube Shorts scriptwriter. "
+        "You write tight, connected mini-essays — NOT a list of random disconnected facts.\n\n"
         f"Topic: {topic}\n"
-        f"Opening hook: start scene 1 with: '{hook}'\n\n"
-        "Rules:\n"
-        "- Exactly 10 scenes\n"
-        "- Each text: 8-14 words, dramatic dark tone, use ... for pauses\n"
-        "- Last scene must end with a question to boost engagement\n"
-        "- Each image prompt: very specific unique dark anime cinematic scene, no repeated scenes\n"
-        "- Title: under 60 chars, no emojis, scroll-stopping\n\n"
+        f"Opening hook: scene 1 must start with: '{hook}'\n\n"
+        "STRUCTURE (this is mandatory, follow it exactly):\n"
+        "- Scene 1: the HOOK — grab attention, state the problem\n"
+        "- Scene 2: explain WHY this happens (the real mechanism, in plain words)\n"
+        "- Scenes 3-4: give ONE concrete example or story that shows it in action\n"
+        "- Scenes 5-6: explain the deeper psychological cause behind it\n"
+        "- Scenes 7-8: show the consequence — what it costs the viewer if they ignore this\n"
+        "- Scene 9: the turning point — what changes once you see it clearly\n"
+        "- Scene 10: a direct question to the viewer that calls back to scene 1\n\n"
+        "RULES:\n"
+        "- Every single scene must flow logically from the one before it, like sentences in one paragraph, "
+        "not like 10 separate quotes. Read them in order — they must sound like ONE story, not 10 facts.\n"
+        "- Talk directly to the viewer using 'you'. Make it feel personal, like you are speaking to one person.\n"
+        "- Each text: 8-16 words, dramatic dark tone, use ... for natural spoken pauses\n"
+        "- NEVER use vague filler like 'they never teach you this' more than once total\n"
+        "- Each image prompt: vivid, specific, unique dark anime cinematic scene matching that exact scene's meaning\n"
+        "- Title: under 60 chars, no emojis, scroll-stopping, matches the actual content\n\n"
         "Return ONLY raw JSON, no markdown, no backticks:\n"
         "{\n"
         '  "title": "...",\n'
         '  "description": "...",\n'
         '  "tags": ["darkpsychology","psychology","mindcontrol","manipulation","shorts","brain","facts","awareness","secrets","mindset"],\n'
         '  "scenes": [\n'
-        '    {"text": "...", "prompt": "dark anime art, [unique scene], dramatic chiaroscuro, 8k, no text, no watermark"},\n'
-        "    ... (10 total)\n"
+        '    {"text": "...", "prompt": "dark anime art, [specific scene matching this line], dramatic chiaroscuro, 8k, no text, no watermark"},\n'
+        "    ... (exactly 10, in narrative order)\n"
         "  ]\n"
         "}"
     )
@@ -196,20 +207,20 @@ def generate_script():
 
 def fallback_script():
     base = {
-        "title": "Dark Tricks Used to Manipulate You Every Day",
-        "description": "The hidden manipulation tactics controlling your life right now.",
+        "title": "Why You Keep Sabotaging Your Own Success",
+        "description": "The hidden psychological loop that quietly destroys your progress.",
         "tags": ["darkpsychology","manipulation","mindcontrol","psychology","shorts","facts","brain","mindset","secrets","awareness"],
         "scenes": [
-            {"text": "Nobody tells you this... you are being manipulated daily.", "prompt": "dark anime art, shadowy puppet master pulling strings on glowing human silhouette, blood red volumetric fog, 8k, no text"},
-            {"text": "Every decision you make... has already been influenced.", "prompt": "dark anime art, massive chess board with human pieces moved by invisible hand, dramatic lighting, 8k, no text"},
-            {"text": "Foot in the door... makes you agree to anything they want.", "prompt": "dark anime art, ancient massive door opening into endless crimson void, eerie glow, 8k, no text"},
-            {"text": "Scarcity triggers panic... bypassing all your rational thought.", "prompt": "dark anime art, cracked hourglass glowing crimson sand draining fast, deep shadows, 8k, no text"},
-            {"text": "Social proof hijacks you... making you copy others blindly.", "prompt": "dark anime art, vast crowd of shadowy identical figures, one different glowing silhouette, 8k, no text"},
-            {"text": "Reciprocity traps you... one favor creates lifelong debt.", "prompt": "dark anime art, golden chains made of wrapped gifts binding figure, dark background, 8k, no text"},
-            {"text": "Authority bias makes you... obey without ever questioning why.", "prompt": "dark anime art, towering dark authority figure casting shadow over crowd, 8k, no text"},
-            {"text": "Anchoring warps your perception... the first number controls all.", "prompt": "dark anime art, giant anchor crushing human mind, distorted numbers floating, 8k, no text"},
-            {"text": "Loss aversion is stronger... than any desire for gain.", "prompt": "dark anime art, figure gripping crumbling treasure while standing on edge of abyss, 8k, no text"},
-            {"text": "Now you see the tricks... can you protect your mind? Comment below.", "prompt": "dark anime art, warrior breaking dark chains into explosive golden light, epic cinematic scale, 8k, no text"},
+            {"text": "Nobody tells you this... you sabotage yourself right before you win.", "prompt": "dark anime art, figure reaching for glowing trophy then pulling back into shadow, dramatic lighting, 8k, no text"},
+            {"text": "Your brain protects you from failure... by making you fail on purpose.", "prompt": "dark anime art, glowing brain with one dark hand secretly pulling levers, 8k, no text"},
+            {"text": "Picture someone who quits a job... two weeks before their big promotion.", "prompt": "dark anime art, figure walking away from glowing office tower into darkness, 8k, no text"},
+            {"text": "It feels random... but their mind planned this exact moment.", "prompt": "dark anime art, chess board where one piece secretly knocks itself down, 8k, no text"},
+            {"text": "Deep down... success feels more dangerous than staying small.", "prompt": "dark anime art, person standing at edge of bright doorway, hesitating in shadow, 8k, no text"},
+            {"text": "If you succeed... you risk being seen, judged, and losing it all.", "prompt": "dark anime art, glowing spotlight surrounded by judging shadow eyes, 8k, no text"},
+            {"text": "So your mind chooses comfort... a slow, quiet failure feels safer.", "prompt": "dark anime art, person curled inside a dim comfortable cage, 8k, no text"},
+            {"text": "Every year you wait... is a year you hand to that fear.", "prompt": "dark anime art, hourglass draining years instead of sand, dark background, 8k, no text"},
+            {"text": "The moment you name this pattern... it starts losing its power over you.", "prompt": "dark anime art, figure breaking chains as shadow self dissolves into light, 8k, no text"},
+            {"text": "So tell me honestly... where in your life are you sabotaging yourself right now?", "prompt": "dark anime art, warrior standing in golden dawn light looking directly forward, epic cinematic, 8k, no text"},
         ],
     }
     return base
@@ -749,17 +760,43 @@ def build_video(scenes):
         clips.append(clip)
 
     final = concatenate_videoclips(clips, method="compose")
+    final_duration = final.duration
+    log.info(f"Final video duration before music: {final_duration:.1f}s")
 
-    music_path = generate_music(duration=int(final.duration)+5)
+    music_path = generate_music(duration=int(final_duration) + 8)
     if music_path and Path(music_path).exists():
         try:
+            # Verify the music file actually has audible signal
+            with wave.open(music_path, "rb") as wf:
+                frames = wf.readframes(wf.getnframes())
+                peak = max(abs(int.from_bytes(frames[i:i+2], "little", signed=True))
+                           for i in range(0, min(len(frames), 200000), 2))
+            if peak < 500:
+                log.warning(f"Music file seems silent (peak={peak}) — regenerating once")
+                music_path = generate_music(duration=int(final_duration) + 8)
+
             music = AudioFileClip(music_path)
-            music = music.subclip(0, min(final.duration, music.duration)).volumex(0.13)
-            mixed = CompositeAudioClip([final.audio, music])
+            # Loop or trim music to match video exactly
+            if music.duration < final_duration:
+                try:
+                    from moviepy.audio.fx.all import audio_loop
+                    music = audio_loop(music, duration=final_duration)
+                except Exception:
+                    # Fallback manual: concatenar el clip consigo mismo hasta cubrir la duración
+                    from moviepy.editor import concatenate_audioclips
+                    loops = int(final_duration // music.duration) + 1
+                    music = concatenate_audioclips([music] * loops).subclip(0, final_duration)
+            else:
+                music = music.subclip(0, final_duration)
+            music = music.volumex(0.22)  # subido de 0.13 -> 0.22, mas audible bajo la voz
+
+            mixed = CompositeAudioClip([final.audio, music]).set_duration(final_duration)
             final = final.set_audio(mixed)
-            log.success("Music mixed OK")
+            log.success(f"Music mixed OK (peak check={peak}, volume=0.22)")
         except Exception as e:
             log.warning(f"Music mix failed: {e} — continuing without music")
+    else:
+        log.warning("No music file generated — video will have voice only")
 
     output = "viral_short.mp4"
     log.info("Rendering final video...")

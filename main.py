@@ -858,14 +858,19 @@ def build_video(scenes):
             else:
                 music = music.subclip(0, final_duration)
 
-            # CRITICAL FIX: igualar el fps de audio entre voz y musica.
+            # CRITICAL FIX: igualar el fps de audio entre voz y musica ANTES de componer.
             # Edge TTS suele exportar a 24000Hz mientras la musica generada va a 44100Hz.
-            # CompositeAudioClip puede silenciar/recortar mal una pista si los fps no coinciden.
+            # CompositeAudioClip puede silenciar/recortar mal una pista si los fps no coinciden,
+            # y ademas CompositeAudioClip no siempre soporta .set_fps() directamente — por eso
+            # igualamos el fps en los clips individuales antes de componer, nunca despues.
             music = music.set_fps(voice_fps)
             music = music.volumex(0.30)  # subido de 0.22 -> 0.30
 
-            mixed = CompositeAudioClip([final.audio, music]).set_duration(final_duration)
-            mixed = mixed.set_fps(voice_fps)
+            voice_clip = final.audio
+            if hasattr(voice_clip, "set_fps"):
+                voice_clip = voice_clip.set_fps(voice_fps)
+
+            mixed = CompositeAudioClip([voice_clip, music]).set_duration(final_duration)
             final = final.set_audio(mixed)
 
             # Sanity check: exportar el audio mezclado a un wav y comprobar que tiene señal real
@@ -887,7 +892,7 @@ def build_video(scenes):
     log.info("Rendering final video...")
     final.write_videofile(
         output, fps=FPS, codec="libx264",
-        audio_codec="aac", bitrate="12000k",
+        audio_codec="aac", audio_fps=44100, bitrate="12000k",
         preset="fast", threads=4,
         ffmpeg_params=["-crf","18"],
         logger=None,

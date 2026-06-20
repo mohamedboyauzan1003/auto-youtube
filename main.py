@@ -23,7 +23,7 @@ MIN_VIDEO_DURATION = 30
 MAX_VIDEO_DURATION = 60
 VOICE_POOL = [
     {"voice": "en-US-GuyNeural",      "rate": "-5%",  "pitch": "-10Hz", "volume": "+30%"},
-    {"voice": "en-US-ChristopherNeural", "rate": "0%",  "pitch": "-8Hz",  "volume": "+25%"},
+    {"voice": "en-US-ChristopherNeural", "rate": "+0%",  "pitch": "-8Hz",  "volume": "+25%"},
     {"voice": "en-US-EricNeural",     "rate": "+5%",  "pitch": "-12Hz", "volume": "+30%"},
     {"voice": "en-GB-RyanNeural",     "rate": "-3%",  "pitch": "-6Hz",  "volume": "+25%"},
     {"voice": "en-US-DavisNeural",    "rate": "+8%",  "pitch": "-5Hz",  "volume": "+30%"},
@@ -231,6 +231,7 @@ def generate_script():
                 script["scenes"].append(random.choice(script["scenes"]).copy())
             script["scenes"] = script["scenes"][:NUM_SCENES]
             log.success(f"Script OK: {script['title']} ({len(script['scenes'])} scenes)")
+            script["_topic"] = topic
             return script
         except json.JSONDecodeError as e:
             log.error(f"JSON parse error attempt {attempt+1}: {e}")
@@ -240,7 +241,9 @@ def generate_script():
             time.sleep(5)
 
     log.warning("All Groq attempts failed — using fallback")
-    return fallback_script()
+    fb = fallback_script()
+    fb["_topic"] = topic
+    return fb
 
 def fallback_script():
     base = {
@@ -589,6 +592,16 @@ def zoom_frame(base_img, t, duration):
 # ═══════════════════════════════════════════════════════════
 #  TTS — SECUENCIAL (Edge TTS no soporta bien paralelismo)
 # ═══════════════════════════════════════════════════════════
+def _ensure_signed(value):
+    """Edge TTS exige signo explicito (+0% no 0%). Normaliza por seguridad."""
+    if not value.startswith(("+", "-")):
+        return f"+{value}"
+    return value
+
+VOICE_RATE   = _ensure_signed(VOICE_RATE)
+VOICE_PITCH  = _ensure_signed(VOICE_PITCH)
+VOICE_VOLUME = _ensure_signed(VOICE_VOLUME)
+
 async def _synth(text, path):
     tts = Communicate(text, voice=VOICE, rate=VOICE_RATE, pitch=VOICE_PITCH, volume=VOICE_VOLUME)
     await tts.save(path)
@@ -914,14 +927,54 @@ def upload_to_youtube(video_path, title, description, tags):
                     },
                     media_body=MediaFileUpload(video_path, mimetype="video/mp4", resumable=True),
                 ).execute()
-                log.success(f"UPLOADED: https://www.youtube.com/watch?v={response['id']}")
-                return
+                video_id = response["id"]
+                log.success(f"UPLOADED: https://www.youtube.com/watch?v={video_id}")
+                return video_id
             except Exception as e:
                 log.error(f"Upload attempt {attempt+1}: {e}")
                 if attempt < UPLOAD_RETRIES - 1:
                     time.sleep(15 * (attempt+1))
     finally:
         os.unlink(token_path)
+    return None
+
+# ═══════════════════════════════════════════════════════════
+#  REGISTRO DE METADATOS — para analizar despues que funciona mejor
+# ═══════════════════════════════════════════════════════════
+def log_video_metadata(video_id, script, duration):
+    """
+    Guarda un CSV con cada video subido: tema, hook, voz, color, mood, duracion.
+    Mas adelante puedes cruzar esto con las vistas reales de YouTube Studio
+    para ver que combinaciones funcionan mejor, en vez de adivinar.
+    """
+    import csv
+    csv_path = CACHE_DIR / "video_log.csv"
+    is_new   = not csv_path.exists()
+    try:
+        with open(csv_path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if is_new:
+                writer.writerow([
+                    "date", "video_id", "url", "title", "topic",
+                    "first_scene_text", "voice", "rate", "pitch",
+                    "subtitle_theme", "music_mood", "duration_s", "num_scenes",
+                ])
+            writer.writerow([
+                time.strftime("%Y-%m-%d %H:%M"),
+                video_id or "FAILED",
+                f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
+                script["title"],
+                script.get("_topic", ""),
+                script["scenes"][0]["text"] if script.get("scenes") else "",
+                VOICE, VOICE_RATE, VOICE_PITCH,
+                THEME["name"], _chosen_mood,
+                f"{duration:.1f}",
+                len(script.get("scenes", [])),
+            ])
+        log.success(f"Metadata logged to {csv_path}")
+    except Exception as e:
+        log.warning(f"Could not log metadata: {e}")
+
 
 # ═══════════════════════════════════════════════════════════
 #  MAIN
@@ -937,11 +990,21 @@ if __name__ == "__main__":
 
     video = build_video(script["scenes"])
 
+    try:
+        from moviepy.editor import VideoFileClip
+        _vc = VideoFileClip(video)
+        video_duration = _vc.duration
+        _vc.close()
+    except Exception:
+        video_duration = 0.0
+
     if not validate_video(video, script["title"], script["description"], script["tags"]):
         log.error("Video failed checklist — aborting upload")
+        log_video_metadata(None, script, video_duration)
         exit(1)
 
-    upload_to_youtube(video, script["title"], script["description"], script["tags"])
+    video_id = upload_to_youtube(video, script["title"], script["description"], script["tags"])
+    log_video_metadata(video_id, script, video_duration)
 
     log.info("="*55)
     log.success("DONE!")

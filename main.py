@@ -21,10 +21,31 @@ MIN_AUDIO_S        = 1.5
 MIN_IMAGE_KB       = 15
 MIN_VIDEO_DURATION = 30
 MAX_VIDEO_DURATION = 60
-VOICE              = "en-US-GuyNeural"
-VOICE_RATE         = "-5%"
-VOICE_PITCH        = "-10Hz"
-VOICE_VOLUME       = "+30%"
+VOICE_POOL = [
+    {"voice": "en-US-GuyNeural",      "rate": "-5%",  "pitch": "-10Hz", "volume": "+30%"},
+    {"voice": "en-US-ChristopherNeural", "rate": "0%",  "pitch": "-8Hz",  "volume": "+25%"},
+    {"voice": "en-US-EricNeural",     "rate": "+5%",  "pitch": "-12Hz", "volume": "+30%"},
+    {"voice": "en-GB-RyanNeural",     "rate": "-3%",  "pitch": "-6Hz",  "volume": "+25%"},
+    {"voice": "en-US-DavisNeural",    "rate": "+8%",  "pitch": "-5Hz",  "volume": "+30%"},
+]
+
+SUBTITLE_THEMES = [
+    {"name": "blood_red",   "highlight": (220, 15, 15, 230),  "accent": (220, 15, 15, 255), "label": (220, 20, 20, 255)},
+    {"name": "toxic_green", "highlight": (40, 200, 90, 230),  "accent": (40, 200, 90, 255), "label": (50, 220, 100, 255)},
+    {"name": "electric_blue","highlight": (30, 140, 240, 230),"accent": (30, 140, 240, 255),"label": (50, 160, 255, 255)},
+    {"name": "violet",      "highlight": (160, 40, 220, 230), "accent": (160, 40, 220, 255),"label": (180, 60, 240, 255)},
+    {"name": "gold",        "highlight": (230, 170, 20, 230), "accent": (230, 170, 20, 255),"label": (240, 190, 40, 255)},
+]
+
+# Se eligen UNA VEZ por ejecución para que todo el video sea consistente
+_chosen_voice = random.choice(VOICE_POOL)
+_chosen_theme = random.choice(SUBTITLE_THEMES)
+
+VOICE        = _chosen_voice["voice"]
+VOICE_RATE   = _chosen_voice["rate"]
+VOICE_PITCH  = _chosen_voice["pitch"]
+VOICE_VOLUME = _chosen_voice["volume"]
+THEME        = _chosen_theme
 IMAGE_RETRIES      = 4
 SCRIPT_RETRIES     = 5
 UPLOAD_RETRIES     = 3
@@ -70,6 +91,9 @@ fh = logging.FileHandler(LOG_DIR / f"{time.strftime('%Y-%m-%d')}.log")
 fh.setFormatter(logging.Formatter("[%(levelname)s] %(asctime)s %(message)s"))
 log.addHandler(fh)
 
+log.info(f"Voice this run: {VOICE} (rate={VOICE_RATE}, pitch={VOICE_PITCH})")
+log.info(f"Subtitle theme this run: {THEME['name']}")
+
 # ═══════════════════════════════════════════════════════════
 #  GROQ SCRIPT GENERATOR
 # ═══════════════════════════════════════════════════════════
@@ -102,19 +126,32 @@ TOPICS = [
 ]
 
 HOOKS = [
-    "Nobody tells you this...",
-    "99 percent of people never realize...",
-    "The biggest lie you believe every day...",
-    "They never want you to know this...",
-    "This will change how you see everything...",
-    "You have been manipulated your entire life...",
-    "What they do not teach you in school...",
-    "The dark truth nobody talks about...",
+    "Nobody tells you this, but the reason is...",
+    "Here is the exact moment your brain betrays you...",
+    "Scientists found the real reason, and it is not what you think...",
+    "Watch what happens in your brain right before you fail...",
+    "This one decision is sabotaging you without you knowing...",
+    "There is a specific moment where this always starts...",
+    "Your brain does this on purpose, and here is why...",
+    "Most people never connect these two things...",
+    "This pattern repeats every single time, watch closely...",
+    "The real reason is hiding in plain sight...",
+    "Here is what is actually happening when this occurs...",
+    "One study found something disturbing about this...",
 ]
 
 def generate_script():
     api_key = os.environ.get("GROQ_API_KEY", "")
-    topic   = random.choice(TOPICS)
+    history_file = CACHE_DIR / "topic_history.json"
+    try:
+        recent = json.loads(history_file.read_text()) if history_file.exists() else []
+    except Exception:
+        recent = []
+    available = [t for t in TOPICS if t not in recent[-8:]] or TOPICS
+    topic   = random.choice(available)
+    recent.append(topic)
+    history_file.write_text(json.dumps(recent[-20:]))
+
     hook    = random.choice(HOOKS)
     log.info(f"Topic: {topic}")
 
@@ -467,9 +504,12 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
 
     draw                   = ImageDraw.Draw(img)
     font_main, font_label  = get_fonts()
+    accent  = THEME["accent"]
+    highlight = THEME["highlight"]
+    label_color = THEME["label"]
 
     bar_y = 85
-    draw.rectangle([(50,bar_y),(w-50,bar_y+7)], fill=(220,15,15,255))
+    draw.rectangle([(50,bar_y),(w-50,bar_y+7)], fill=accent)
 
     words    = text.split()
     shown    = words[:word_progress]
@@ -497,7 +537,7 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
                 pad = 6
                 draw.rounded_rectangle(
                     [x-pad, y-pad, x+ww_w-bb[0]+pad, y+line_h-12+pad],
-                    radius=8, fill=(220,15,15,230)
+                    radius=8, fill=highlight
                 )
                 for ox,oy in [(3,3),(2,2)]:
                     draw.text((x+ox,y+oy), ww_, font=font_main, fill=(0,0,0,180))
@@ -508,12 +548,12 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
                 draw.text((x,y), ww_, font=font_main, fill=(255,255,255,255))
             x += ww_w
 
-    draw.rectangle([(50,h-158),(w-50,h-151)], fill=(220,15,15,200))
+    draw.rectangle([(50,h-158),(w-50,h-151)], fill=accent[:3]+(200,))
     label = "DARK PSYCHOLOGY"
     bb    = draw.textbbox((0,0), label, font=font_label)
     lx    = (w-(bb[2]-bb[0]))//2
     draw.text((lx+3,h-128+3), label, font=font_label, fill=(0,0,0,200))
-    draw.text((lx,  h-128),   label, font=font_label, fill=(220,20,20,255))
+    draw.text((lx,  h-128),   label, font=font_label, fill=label_color)
 
     dd  = 12
     sp  = 26
@@ -523,18 +563,20 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
     for s in range(total_scenes):
         cx_ = dx + s*sp
         if s == scene_num:
-            draw.ellipse([cx_-2,dy-2,cx_+dd+2,dy+dd+2], fill=(180,10,10,255))
-            draw.ellipse([cx_,dy,cx_+dd,dy+dd],          fill=(220,20,20,255))
+            draw.ellipse([cx_-2,dy-2,cx_+dd+2,dy+dd+2], fill=accent)
+            draw.ellipse([cx_,dy,cx_+dd,dy+dd],          fill=accent)
         else:
             draw.ellipse([cx_,dy,cx_+dd,dy+dd], fill=(70,70,70,150))
 
     return np.array(img.convert("RGB"))
 
 # ═══════════════════════════════════════════════════════════
-#  ZOOM + PAN
+#  ZOOM + PAN — intensidad variable por video
 # ═══════════════════════════════════════════════════════════
+_ZOOM_INTENSITY = random.uniform(0.05, 0.10)  # mas alto = mas dinamico/rapido
+
 def zoom_frame(base_img, t, duration):
-    zoom  = 1.0 + 0.06*(t/duration)
+    zoom  = 1.0 + _ZOOM_INTENSITY*(t/duration)
     pan_x = 0.015 * np.sin(2*np.pi*t/duration)
     pan_y = 0.008 * np.cos(2*np.pi*t/duration)
     w, h  = base_img.size
@@ -627,7 +669,12 @@ def _make_silence(path, duration=3.0):
 # ═══════════════════════════════════════════════════════════
 #  DARK AMBIENT MUSIC
 # ═══════════════════════════════════════════════════════════
-def generate_music(duration=60):
+MUSIC_MOODS = ["tense", "ethereal", "ominous"]
+_chosen_mood = random.choice(MUSIC_MOODS)
+log.info(f"Music mood this run: {_chosen_mood}")
+
+def generate_music(duration=60, mood=None):
+    mood = mood or _chosen_mood
     try:
         sr      = 44100
         t       = np.linspace(0, duration, int(sr*duration), dtype=np.float32)
@@ -640,7 +687,14 @@ def generate_music(duration=60):
         music += 0.05 * np.sin(2*np.pi*base_hz*2.997*t)
         music += 0.04 * np.sin(2*np.pi*base_hz*0.5*t)
 
-        pulse   = 0.45 + 0.55*np.sin(2*np.pi*random.uniform(0.06,0.10)*t)
+        if mood == "tense":
+            pulse_rate = random.uniform(0.12, 0.18)  # mas rapido = mas tension
+        elif mood == "ethereal":
+            pulse_rate = random.uniform(0.03, 0.06)  # mas lento = mas etereo
+        else:  # ominous
+            pulse_rate = random.uniform(0.06, 0.10)
+
+        pulse   = 0.45 + 0.55*np.sin(2*np.pi*pulse_rate*t)
         music  *= pulse
         shz     = random.choice([220,277,330,370,415])
         music  += 0.04 * np.sin(2*np.pi*shz*t) * np.sin(2*np.pi*random.uniform(0.18,0.28)*t)
@@ -658,7 +712,7 @@ def generate_music(duration=60):
         with wave.open(wav,"w") as wf:
             wf.setnchannels(1); wf.setsampwidth(2)
             wf.setframerate(sr); wf.writeframes(ai.tobytes())
-        log.success(f"Music generated ({duration}s)")
+        log.success(f"Music generated ({duration}s, mood={mood})")
         return wav
     except Exception as e:
         log.error(f"Music error: {e}")
@@ -775,6 +829,9 @@ def build_video(scenes):
                 log.warning(f"Music file seems silent (peak={peak}) — regenerating once")
                 music_path = generate_music(duration=int(final_duration) + 8)
 
+            voice_fps = final.audio.fps if final.audio else 44100
+            log.info(f"Voice audio fps: {voice_fps}")
+
             music = AudioFileClip(music_path)
             # Loop or trim music to match video exactly
             if music.duration < final_duration:
@@ -782,17 +839,32 @@ def build_video(scenes):
                     from moviepy.audio.fx.all import audio_loop
                     music = audio_loop(music, duration=final_duration)
                 except Exception:
-                    # Fallback manual: concatenar el clip consigo mismo hasta cubrir la duración
                     from moviepy.editor import concatenate_audioclips
                     loops = int(final_duration // music.duration) + 1
                     music = concatenate_audioclips([music] * loops).subclip(0, final_duration)
             else:
                 music = music.subclip(0, final_duration)
-            music = music.volumex(0.22)  # subido de 0.13 -> 0.22, mas audible bajo la voz
+
+            # CRITICAL FIX: igualar el fps de audio entre voz y musica.
+            # Edge TTS suele exportar a 24000Hz mientras la musica generada va a 44100Hz.
+            # CompositeAudioClip puede silenciar/recortar mal una pista si los fps no coinciden.
+            music = music.set_fps(voice_fps)
+            music = music.volumex(0.30)  # subido de 0.22 -> 0.30
 
             mixed = CompositeAudioClip([final.audio, music]).set_duration(final_duration)
+            mixed = mixed.set_fps(voice_fps)
             final = final.set_audio(mixed)
-            log.success(f"Music mixed OK (peak check={peak}, volume=0.22)")
+
+            # Sanity check: exportar el audio mezclado a un wav y comprobar que tiene señal real
+            check_wav = "mixed_check.wav"
+            mixed.write_audiofile(check_wav, fps=voice_fps, logger=None)
+            with wave.open(check_wav, "rb") as wf:
+                fr = wf.readframes(min(wf.getnframes(), 100000))
+                mixed_peak = max(abs(int.from_bytes(fr[i:i+2], "little", signed=True))
+                                  for i in range(0, len(fr)-1, 2)) if len(fr) > 1 else 0
+            log.success(f"Music mixed OK (music_peak={peak}, mixed_peak={mixed_peak}, volume=0.30)")
+            if mixed_peak < 200:
+                log.warning("Mixed audio peak suspiciously low — music may not be audible")
         except Exception as e:
             log.warning(f"Music mix failed: {e} — continuing without music")
     else:

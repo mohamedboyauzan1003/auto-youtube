@@ -842,8 +842,11 @@ def build_video(scenes):
                 log.warning(f"Music file seems silent (peak={peak}) — regenerating once")
                 music_path = generate_music(duration=int(final_duration) + 8)
 
-            voice_fps = final.audio.fps if final.audio else 44100
-            log.info(f"Voice audio fps: {voice_fps}")
+            # NUNCA leer .fps ni .set_fps() de un CompositeAudioClip.
+            # final.audio YA es un CompositeAudioClip (concatenate_videoclips compone
+            # el audio de las 10 escenas internamente), asi que acceder a .fps revienta
+            # con AttributeError. Usamos un valor fijo conocido en su lugar.
+            voice_fps = 44100
 
             music = AudioFileClip(music_path)
             # Loop or trim music to match video exactly
@@ -858,13 +861,8 @@ def build_video(scenes):
             else:
                 music = music.subclip(0, final_duration)
 
-            music = music.volumex(0.30)  # subido de 0.22 -> 0.30
+            music = music.volumex(0.30)
 
-            # No tocamos .fps en ningun CompositeAudioClip — esta version de MoviePy
-            # no expone ese atributo de forma fiable en el objeto compuesto y rompe
-            # tanto en .set_fps() como al forzar la escritura para verificar.
-            # En su lugar, dejamos que write_videofile() defina audio_fps=44100
-            # explicitamente al final, que es el punto real donde se vuelca a disco.
             mixed = CompositeAudioClip([final.audio, music]).set_duration(final_duration)
             final = final.set_audio(mixed)
             log.success(f"Music mixed OK (music_peak={peak}, volume=0.30)")

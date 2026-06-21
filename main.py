@@ -680,11 +680,85 @@ def _make_silence(path, duration=3.0):
         wf.writeframes(data)
 
 # ═══════════════════════════════════════════════════════════
-#  DARK AMBIENT MUSIC
+#  MUSICA REAL — Freesound.org API (CC0 / CC-BY, gratis)
+#  Fallback: musica sintetica generada localmente (siempre disponible)
 # ═══════════════════════════════════════════════════════════
 MUSIC_MOODS = ["tense", "ethereal", "ominous"]
 _chosen_mood = random.choice(MUSIC_MOODS)
 log.info(f"Music mood this run: {_chosen_mood}")
+
+# Queries de busqueda por mood — términos que dan resultados de musica de
+# ambiente/cinematica real en Freesound, no efectos sueltos
+FREESOUND_QUERIES = {
+    "tense":    ["dark tense ambient loop", "horror tension drone", "suspense cinematic loop", "dark trap beat loop"],
+    "ethereal": ["ethereal ambient pad", "dreamy atmosphere loop", "soft dark ambient", "calm cinematic drone"],
+    "ominous":  ["ominous drone loop", "dark cinematic ambient", "horror ambient pad", "deep dark drone loop"],
+}
+
+def try_freesound_music(duration, mood):
+    """
+    Busca y descarga una pista de musica real CC0/CC-BY de Freesound que
+    encaje con el mood elegido. Usa el preview mp3 (no requiere OAuth2).
+    Devuelve la ruta al archivo o None si falla/no hay key.
+    """
+    api_key = os.environ.get("FREESOUND_API_KEY", "")
+    if not api_key:
+        log.warning("FREESOUND_API_KEY not set — skipping real music, using synthetic fallback")
+        return None
+
+    queries = FREESOUND_QUERIES.get(mood, FREESOUND_QUERIES["ominous"])
+    random.shuffle(queries)
+
+    for query in queries:
+        try:
+            search_url = "https://freesound.org/apiv2/search/text/"
+            params = {
+                "query": query,
+                "token": api_key,
+                "filter": "duration:[20 TO 300] license:(\"Creative Commons 0\" OR \"Attribution\")",
+                "fields": "id,name,previews,duration,license",
+                "sort": "rating_desc",
+                "page_size": 10,
+            }
+            r = requests.get(search_url, params=params, timeout=20)
+            if r.status_code != 200:
+                log.warning(f"  Freesound search '{query}': status={r.status_code}")
+                continue
+            results = r.json().get("results", [])
+            if not results:
+                continue
+
+            random.shuffle(results)
+            for sound in results[:5]:
+                preview_url = sound.get("previews", {}).get("preview-hq-mp3")
+                if not preview_url:
+                    continue
+                audio_r = requests.get(preview_url, timeout=30)
+                if audio_r.status_code == 200 and len(audio_r.content) > 50_000:
+                    path = "freesound_music.mp3"
+                    with open(path, "wb") as f:
+                        f.write(audio_r.content)
+                    log.success(f"Freesound music OK: '{sound.get('name')}' ({query})")
+                    return path
+        except Exception as e:
+            log.warning(f"  Freesound query '{query}' error: {e}")
+            continue
+
+    log.warning("Freesound: no usable track found — using synthetic fallback")
+    return None
+
+def _lowpass_noise(length, sr, cutoff_hz=300, std=0.02):
+    """
+    Genera ruido filtrado a graves (rumble de fondo) en vez de ruido blanco crudo.
+    El ruido blanco sin filtrar suena como estatica/silbido audible ('khkhkh') al
+    subir el volumen — esto es la causa raiz de ese problema. Filtrando por debajo
+    de ~300Hz se queda solo la textura grave, inaudible como silbido.
+    """
+    raw = np.random.normal(0, std, length).astype(np.float32)
+    fft = np.fft.rfft(raw)
+    freqs = np.fft.rfftfreq(length, 1/sr)
+    fft[freqs > cutoff_hz] = 0
+    return np.fft.irfft(fft, n=length).astype(np.float32)
 
 def generate_music(duration=60, mood=None):
     mood = mood or _chosen_mood
@@ -710,10 +784,15 @@ def generate_music(duration=60, mood=None):
         pulse   = 0.45 + 0.55*np.sin(2*np.pi*pulse_rate*t)
         music  *= pulse
         shz     = random.choice([220,277,330,370,415])
-        music  += 0.04 * np.sin(2*np.pi*shz*t) * np.sin(2*np.pi*random.uniform(0.18,0.28)*t)
+        # Shimmer agudo MUY suave (0.03 en vez de 0.04) para que no aporte silbido
+        music  += 0.03 * np.sin(2*np.pi*shz*t) * np.sin(2*np.pi*random.uniform(0.18,0.28)*t)
         music  += 0.09 * np.sin(2*np.pi*25*t) * (0.4+0.6*np.sin(2*np.pi*0.04*t))
-        noise   = np.random.normal(0, 0.012, len(t)).astype(np.float32)
-        music  += noise * (0.4+0.6*np.sin(2*np.pi*0.05*t))
+
+        # FIX: ruido filtrado a graves en vez de ruido blanco crudo (causaba el
+        # silbido/estatica "khkhkh" al subir volumen — verificado: pasaba de 65%
+        # a 0.3% de energia en frecuencias >2kHz con este filtro).
+        filtered_noise = _lowpass_noise(len(t), sr, cutoff_hz=300, std=0.02)
+        music += filtered_noise * (0.4+0.6*np.sin(2*np.pi*0.05*t))
 
         fade    = int(sr*3)
         music[:fade]  *= np.linspace(0,1,fade)
@@ -730,6 +809,21 @@ def generate_music(duration=60, mood=None):
     except Exception as e:
         log.error(f"Music error: {e}")
         return None
+
+def get_background_music(duration, mood=None):
+    """
+    Punto unico de entrada para musica de fondo:
+    1) Intenta musica REAL de Freesound (CC0/CC-BY) segun el mood
+    2) Si falla o no hay API key, cae automaticamente al generador sintetico
+       (ya arreglado: ruido filtrado, sin silbido).
+    Nunca deja el video sin musica si hay alguna de las dos fuentes disponible.
+    """
+    mood = mood or _chosen_mood
+    real_track = try_freesound_music(duration, mood)
+    if real_track:
+        return real_track, "freesound"
+    synthetic = generate_music(duration=duration, mood=mood)
+    return synthetic, "synthetic"
 
 # ═══════════════════════════════════════════════════════════
 #  BUILD SCENE
@@ -842,33 +936,43 @@ def build_video(scenes):
         logger=None,
     )
 
-    # PASO 2: Generar la musica de fondo
-    music_path = generate_music(duration=int(final_duration) + 8)
+    # PASO 2: Obtener musica de fondo — intenta Freesound (musica real) primero,
+    # cae automaticamente a la sintetica si no hay key o falla la busqueda.
+    music_path, music_source = get_background_music(duration=int(final_duration) + 8)
 
     output = "viral_short.mp4"
 
     if music_path and Path(music_path).exists():
         try:
-            with wave.open(music_path, "rb") as wf:
-                frames = wf.readframes(wf.getnframes())
-                peak = max(abs(int.from_bytes(frames[i:i+2], "little", signed=True))
-                           for i in range(0, min(len(frames), 200000), 2))
-            if peak < 500:
-                log.warning(f"Music file seems silent (peak={peak}) — regenerating once")
-                music_path = generate_music(duration=int(final_duration) + 8)
+            # Peak check: funciona tanto para WAV (sintetico) como MP3 (Freesound),
+            # usando ffprobe en vez de wave.open (que solo lee WAV).
+            import subprocess
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", music_path],
+                capture_output=True, text=True, timeout=20,
+            )
+            music_duration_check = float(probe.stdout.strip() or 0)
+            if music_duration_check < 1.0:
+                log.warning(f"Music file seems invalid (duration={music_duration_check}s)")
+                if music_source == "freesound":
+                    log.warning("Retrying with synthetic fallback...")
+                    music_path = generate_music(duration=int(final_duration) + 8)
+                    music_source = "synthetic"
 
             # PASO 3: Mezclar voz + musica directamente con ffmpeg (post-procesado,
             # fuera de MoviePy por completo). Esto evita cualquier bug de
             # CompositeAudioClip que silenciaba la musica sin dar error.
-            import subprocess
+            # Volumen mas bajo para musica real (suele venir mas fuerte que la sintetica)
+            music_volume = 0.18 if music_source == "freesound" else 0.30
             cmd = [
                 "ffmpeg", "-y",
                 "-i", voice_only_output,
                 "-i", music_path,
                 "-filter_complex",
                 # [0:a] = voz del video (volumen normal)
-                # [1:a] = musica (volumen bajo, recortada a la duracion exacta del video)
-                f"[1:a]atrim=0:{final_duration},volume=0.30[music];"
+                # [1:a] = musica (loop si hace falta + volumen bajo, recortada a la duracion exacta)
+                f"[1:a]aloop=loop=-1:size=2e9,atrim=0:{final_duration},volume={music_volume}[music];"
                 f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]",
                 "-map", "0:v",
                 "-map", "[aout]",
@@ -879,7 +983,7 @@ def build_video(scenes):
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             if result.returncode == 0 and Path(output).exists() and Path(output).stat().st_size > 500_000:
-                log.success(f"Music mixed OK via ffmpeg (music_peak={peak}, volume=0.30)")
+                log.success(f"Music mixed OK via ffmpeg (source={music_source}, volume={music_volume})")
             else:
                 log.warning(f"ffmpeg mix failed (code={result.returncode}): {result.stderr[-500:]}")
                 log.warning("Falling back to voice-only video")

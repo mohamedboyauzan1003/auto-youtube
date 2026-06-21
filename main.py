@@ -964,7 +964,7 @@ def build_video(scenes):
             # fuera de MoviePy por completo). Esto evita cualquier bug de
             # CompositeAudioClip que silenciaba la musica sin dar error.
             # Volumen mas bajo para musica real (suele venir mas fuerte que la sintetica)
-            music_volume = 0.18 if music_source == "freesound" else 0.30
+            music_volume = 0.35 if music_source == "freesound" else 0.45
             cmd = [
                 "ffmpeg", "-y",
                 "-i", voice_only_output,

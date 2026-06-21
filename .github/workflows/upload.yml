@@ -16,6 +16,8 @@ jobs:
   upload:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +50,20 @@ jobs:
           TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           HF_API_KEY: ${{ secrets.HF_API_KEY }}
+          FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
         run: python main.py
+
+      - name: Commit video log CSV back to repo
+        if: always()
+        run: |
+          if [ -f cache/video_log.csv ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add cache/video_log.csv
+            git diff --staged --quiet || git commit -m "Update video log [skip ci]"
+            git pull --rebase origin master || true
+            git push origin master || echo "Push failed, will retry next run"
+          fi
 
       - name: Upload logs as artifact
         if: always()
@@ -57,3 +72,12 @@ jobs:
           name: bot-logs-${{ github.run_number }}
           path: logs/
           retention-days: 14
+
+      - name: Upload video metadata CSV as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-log-${{ github.run_number }}
+          path: cache/video_log.csv
+          retention-days: 90
+          if-no-files-found: ignore

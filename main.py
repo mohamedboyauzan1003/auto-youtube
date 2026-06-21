@@ -828,12 +828,27 @@ def build_video(scenes):
 
     final = concatenate_videoclips(clips, method="compose")
     final_duration = final.duration
-    log.info(f"Final video duration before music: {final_duration:.1f}s")
+    log.info(f"Final video duration: {final_duration:.1f}s")
 
+    # PASO 1: Renderizar el video SOLO con la voz (sin tocar musica/CompositeAudioClip
+    # dentro de MoviePy, que ha demostrado ser poco fiable para mezclar dos pistas).
+    voice_only_output = "viral_short_voice_only.mp4"
+    log.info("Rendering video with voice only...")
+    final.write_videofile(
+        voice_only_output, fps=FPS, codec="libx264",
+        audio_codec="aac", bitrate="12000k",
+        preset="fast", threads=4,
+        ffmpeg_params=["-crf","18"],
+        logger=None,
+    )
+
+    # PASO 2: Generar la musica de fondo
     music_path = generate_music(duration=int(final_duration) + 8)
+
+    output = "viral_short.mp4"
+
     if music_path and Path(music_path).exists():
         try:
-            # Verify the music file actually has audible signal
             with wave.open(music_path, "rb") as wf:
                 frames = wf.readframes(wf.getnframes())
                 peak = max(abs(int.from_bytes(frames[i:i+2], "little", signed=True))
@@ -842,54 +857,43 @@ def build_video(scenes):
                 log.warning(f"Music file seems silent (peak={peak}) — regenerating once")
                 music_path = generate_music(duration=int(final_duration) + 8)
 
-            # NUNCA leer .fps ni .set_fps() de un CompositeAudioClip.
-            # final.audio YA es un CompositeAudioClip (concatenate_videoclips compone
-            # el audio de las 10 escenas internamente), asi que acceder a .fps revienta
-            # con AttributeError. Usamos un valor fijo conocido en su lugar.
-            voice_fps = 44100
-
-            music = AudioFileClip(music_path)
-            # Loop or trim music to match video exactly
-            if music.duration < final_duration:
-                try:
-                    from moviepy.audio.fx.all import audio_loop
-                    music = audio_loop(music, duration=final_duration)
-                except Exception:
-                    from moviepy.editor import concatenate_audioclips
-                    loops = int(final_duration // music.duration) + 1
-                    music = concatenate_audioclips([music] * loops).subclip(0, final_duration)
+            # PASO 3: Mezclar voz + musica directamente con ffmpeg (post-procesado,
+            # fuera de MoviePy por completo). Esto evita cualquier bug de
+            # CompositeAudioClip que silenciaba la musica sin dar error.
+            import subprocess
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", voice_only_output,
+                "-i", music_path,
+                "-filter_complex",
+                # [0:a] = voz del video (volumen normal)
+                # [1:a] = musica (volumen bajo, recortada a la duracion exacta del video)
+                f"[1:a]atrim=0:{final_duration},volume=0.30[music];"
+                f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]",
+                "-map", "0:v",
+                "-map", "[aout]",
+                "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "192k",
+                "-shortest",
+                output,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if result.returncode == 0 and Path(output).exists() and Path(output).stat().st_size > 500_000:
+                log.success(f"Music mixed OK via ffmpeg (music_peak={peak}, volume=0.30)")
             else:
-                music = music.subclip(0, final_duration)
-
-            music = music.volumex(0.30)
-
-            mixed = CompositeAudioClip([final.audio, music]).set_duration(final_duration)
-            final = final.set_audio(mixed)
-            log.success(f"Music mixed OK (music_peak={peak}, volume=0.30)")
+                log.warning(f"ffmpeg mix failed (code={result.returncode}): {result.stderr[-500:]}")
+                log.warning("Falling back to voice-only video")
+                import shutil
+                shutil.copy(voice_only_output, output)
         except Exception as e:
-            log.warning(f"Music mix failed: {e} — continuing without music")
+            log.warning(f"Music mix failed: {e} — falling back to voice-only video")
+            import shutil
+            shutil.copy(voice_only_output, output)
     else:
-        log.warning("No music file generated — video will have voice only")
+        log.warning("No music file generated — using voice-only video")
+        import shutil
+        shutil.copy(voice_only_output, output)
 
-    output = "viral_short.mp4"
-    log.info("Rendering final video...")
-    try:
-        final.write_videofile(
-            output, fps=FPS, codec="libx264",
-            audio_codec="aac", audio_fps=44100, bitrate="12000k",
-            preset="fast", threads=4,
-            ffmpeg_params=["-crf","18"],
-            logger=None,
-        )
-    except Exception as e:
-        log.warning(f"Render with explicit audio_fps failed ({e}), retrying without it...")
-        final.write_videofile(
-            output, fps=FPS, codec="libx264",
-            audio_codec="aac", bitrate="12000k",
-            preset="fast", threads=4,
-            ffmpeg_params=["-crf","18"],
-            logger=None,
-        )
     return output
 
 # ═══════════════════════════════════════════════════════════

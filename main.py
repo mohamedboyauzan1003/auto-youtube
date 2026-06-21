@@ -602,8 +602,20 @@ VOICE_RATE   = _ensure_signed(VOICE_RATE)
 VOICE_PITCH  = _ensure_signed(VOICE_PITCH)
 VOICE_VOLUME = _ensure_signed(VOICE_VOLUME)
 
-async def _synth(text, path):
-    tts = Communicate(text, voice=VOICE, rate=VOICE_RATE, pitch=VOICE_PITCH, volume=VOICE_VOLUME)
+# Voz de respaldo fija y fiable — si la voz elegida al azar para este video
+# falla repetidamente (Edge TTS a veces tiene caidas intermitentes por voz/region,
+# no es un bug de codigo), cambiamos a esta automaticamente en vez de generar
+# silencio en las 10 escenas.
+FALLBACK_VOICE = {"voice": "en-US-GuyNeural", "rate": "+0%", "pitch": "+0Hz", "volume": "+25%"}
+
+async def _synth(text, path, voice=None, rate=None, pitch=None, volume=None):
+    tts = Communicate(
+        text,
+        voice=voice or VOICE,
+        rate=rate or VOICE_RATE,
+        pitch=pitch or VOICE_PITCH,
+        volume=volume or VOICE_VOLUME,
+    )
     await tts.save(path)
 
 def _audio_duration_ok(path, text):
@@ -636,10 +648,17 @@ def synth_one(text, index):
             return out_path
 
     for attempt in range(TTS_RETRIES):
+        # Tras 2 intentos fallidos con la voz elegida, cambiar a la voz de
+        # respaldo — evita perder las 10 escenas por una caida puntual de una voz.
+        use_fallback = attempt >= 2
+        v = FALLBACK_VOICE if use_fallback else None
         try:
             if Path(out_path).exists():
                 os.remove(out_path)
-            asyncio.run(_synth(text, out_path))
+            if use_fallback:
+                asyncio.run(_synth(text, out_path, voice=v["voice"], rate=v["rate"], pitch=v["pitch"], volume=v["volume"]))
+            else:
+                asyncio.run(_synth(text, out_path))
             p = Path(out_path)
             if not p.exists() or p.stat().st_size < min_bytes:
                 log.warning(f"Audio {index+1} too small ({p.stat().st_size if p.exists() else 0}B), retry {attempt+1}...")
@@ -649,11 +668,14 @@ def synth_one(text, index):
             if ok:
                 import shutil
                 shutil.copy(out_path, cache_path)
-                log.success(f"Audio {index+1} OK ({p.stat().st_size//1024}KB, {dur:.1f}s)")
+                tag = " (fallback voice)" if use_fallback else ""
+                log.success(f"Audio {index+1} OK ({p.stat().st_size//1024}KB, {dur:.1f}s){tag}")
                 return out_path
             log.warning(f"Audio {index+1} duration too short ({dur:.1f}s for {len(text.split())} words), retry {attempt+1}...")
         except Exception as e:
             log.warning(f"Audio {index+1} attempt {attempt+1} error: {e}")
+            if attempt == 1:
+                log.warning(f"Audio {index+1}: switching to fallback voice ({FALLBACK_VOICE['voice']}) for remaining attempts")
         time.sleep(2 + attempt)
 
     log.error(f"Audio {index+1} failed after {TTS_RETRIES} attempts — creating silence")

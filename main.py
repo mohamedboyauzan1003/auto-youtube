@@ -83,8 +83,7 @@ fh = logging.FileHandler(LOG_DIR / f"{time.strftime('%Y-%m-%d')}.log")
 fh.setFormatter(logging.Formatter("[%(levelname)s] %(asctime)s %(message)s")); log.addHandler(fh)
 
 log.info(f"Voice: {VOICE} (rate={VOICE_RATE}, pitch={VOICE_PITCH})")
-log.info(f"Theme: {THEME[\'name\']}")
-
+log.info(f"Theme: {THEME['name']}")
 # ═══════════════════════════════════════════════════════════
 #  UPLOAD GUARD — evita publicar si ya se publico en la ultima hora
 # ═══════════════════════════════════════════════════════════

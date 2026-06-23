@@ -91,16 +91,23 @@ log.info(f"Theme: {THEME['name']}")
 UPLOAD_GUARD_FILE = CACHE_DIR / "last_upload.json"
 
 def check_upload_guard():
-    """Devuelve True si se puede publicar (no se ha publicado en los ultimos 55 min)."""
+    """
+    Comprueba si ya se publico un video recientemente.
+    Si FORCE_UPLOAD=true (lo pone el workflow), ignora el guard y publica siempre.
+    El guard solo actua si se ejecuta manualmente sin esa variable.
+    """
+    if os.environ.get("FORCE_UPLOAD", "").lower() == "true":
+        log.info("FORCE_UPLOAD=true — publishing now (guard bypassed)")
+        return True
     try:
         if not UPLOAD_GUARD_FILE.exists():
             return True
         data = json.loads(UPLOAD_GUARD_FILE.read_text())
         last_ts = data.get("timestamp", 0)
         elapsed = time.time() - last_ts
-        if elapsed < 55 * 60:  # 55 min de margen
+        if elapsed < 55 * 60:
             mins_left = int((55*60 - elapsed) / 60)
-            log.warning(f"Upload guard: last upload was {int(elapsed/60)}min ago ({mins_left}min remaining). Skipping.")
+            log.warning(f"Upload guard: last upload {int(elapsed/60)}min ago ({mins_left}min left).")
             return False
         return True
     except Exception:

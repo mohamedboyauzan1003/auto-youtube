@@ -44,3 +44,4 @@ date,video_id,url,title,topic,first_scene_text,voice,rate,pitch,subtitle_theme,m
 2026-06-25 04:08,FAILED,,Trapped,how anchoring bias controls every purchase you make,"This is the reason you feel stuck, and you never knew. Your wallet is a puppet...",en-US-EricNeural,+20%,-12Hz,toxic_green,ethereal,25.4,7
 2026-06-25 05:09,FAILED,,Deceived,manipulation tactics people use daily,This happens to you every single day. You're controlled.,en-US-DavisNeural,+22%,-5Hz,gold,tense,24.1,7
 2026-06-25 06:10,FAILED,,Envied,psychological signs someone secretly envies you,This happens to you every single day. Your 'friends' are plotting against you...,en-US-ChristopherNeural,+18%,-8Hz,gold,ethereal,29.6,7
+2026-06-25 07:09,FAILED,,Envy,psychological signs someone secretly envies you,"This is the reason you feel stuck, and you never knew. Your success ... sparks envy.",en-US-GuyNeural,+15%,-10Hz,violet,tense,28.4,7

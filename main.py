@@ -27,14 +27,16 @@ UPLOAD_RETRIES     = 3
 TTS_RETRIES        = 4
 
 VOICE_POOL = [
-    {"voice": "en-US-GuyNeural",         "rate": "+15%", "pitch": "-10Hz", "volume": "+30%"},
-    {"voice": "en-US-ChristopherNeural", "rate": "+18%", "pitch": "-8Hz",  "volume": "+25%"},
-    {"voice": "en-US-EricNeural",        "rate": "+20%", "pitch": "-12Hz", "volume": "+30%"},
-    {"voice": "en-GB-RyanNeural",        "rate": "+12%", "pitch": "-6Hz",  "volume": "+25%"},
-    {"voice": "en-US-DavisNeural",       "rate": "+22%", "pitch": "-5Hz",  "volume": "+30%"},
-]
-FALLBACK_VOICE = {"voice": "en-US-GuyNeural", "rate": "+15%", "pitch": "+0Hz", "volume": "+25%"}
-
+    {"voice": "es-ES-AlvaroNeural", "rate": "+15%", "pitch": "-5Hz", "volume": "+30%"},
+    {"voice": "es-ES-ArnauNeural", "rate": "+15%", "pitch": "-5Hz", "volume": "+30%"},
+    {"voice": "es-ES-ElviraNeural", "rate": "+15%", "pitch": "-5Hz", "volume": "+30%"},
+]    
+FALLBACK_VOICE = {
+    "voice": "es-ES-AlvaroNeural",
+    "rate": "+15%",
+    "pitch": "-5Hz",
+    "volume": "+30%"
+}
 SUBTITLE_THEMES = [
     {"name": "blood_red",    "highlight": (220,15,15,230),   "accent": (220,15,15,255),  "label": (220,20,20,255)},
     {"name": "toxic_green",  "highlight": (40,200,90,230),   "accent": (40,200,90,255),  "label": (50,220,100,255)},
@@ -128,52 +130,110 @@ def update_upload_guard(video_id):
 #  GROQ SCRIPT — estructura narrativa corta y adictiva
 # ═══════════════════════════════════════════════════════════
 TOPICS = [
-    "manipulation tactics people use daily",
-    "dark cognitive biases controlling your decisions",
-    "subconscious mind tricks you never knew about",
-    "body language secrets manipulators exploit",
-    "dark persuasion techniques in advertising",
-    "psychological reasons you cannot say no",
-    "signs someone is gaslighting you right now",
-    "how your ego blinds you from truth",
-    "dark truths about human nature nobody says",
-    "hidden reasons people self sabotage success",
-    "psychological tricks narcissists use on you",
-    "how fear silently controls every decision",
-    "dark side of social media on your brain",
-    "why your brain is hardwired for negativity",
-    "psychological power moves of influential leaders",
-    "why intelligent people stay in toxic relationships",
-    "how childhood trauma silently shapes you today",
-    "why your brain secretly craves drama",
-    "how dopamine addiction is engineered to control you",
-    "the psychology behind why people obey authority",
-    "dark reason why you care what strangers think",
-    "how silence is used as a weapon of control",
-    "psychological signs someone secretly envies you",
-    "why your brain sabotages your own happiness",
-    "dark truth about why people lie to themselves",
-    "how anchoring bias controls every purchase you make",
-    "the dark reason you cannot stop scrolling",
-    "why your brain remembers insults more than compliments",
-    "how mirror neurons make you copy people without knowing",
-    "the sunk cost trap that ruins lives silently",
+    "por qué la gente pierde el interés en ti",
+    "por qué no puedes dejar de pensar en una persona",
+    "cómo las personas atractivas manipulan sin hablar",
+    "por qué tu cerebro se vuelve adicto a las personas tóxicas",
+    "la psicología detrás del ghosting",
+    "por qué alguien ignora tus mensajes a propósito",
+    "cómo los narcisistas hacen que te sientas culpable",
+    "por qué pensar demasiado destruye tu confianza",
+    "cómo las redes sociales reprograman tu cerebro",
+    "por qué la gente se compara contigo en secreto",
+    "la psicología de los celos",
+    "por qué algunas personas fingen que no les importas",
+    "cómo los manipuladores consiguen tu confianza",
+    "por qué tu crush actúa de forma tan confusa",
+    "por qué tu cerebro recuerda momentos vergonzosos durante años",
+    "cómo el silencio puede ser una forma de manipulación",
+    "por qué la confianza intimida a las personas inseguras",
+    "la psicología de la popularidad",
+    "por qué tu cerebro inventa escenarios que nunca ocurren",
+    "cómo la gente te manipula usando cumplidos",
+    "la psicología de dejarte en visto",
+    "por qué tu ex vuelve cuando ya lo habías superado",
+    "por qué las relaciones tóxicas son tan difíciles de dejar",
+    "cómo tu cerebro se vuelve adicto a la aprobación de los demás",
+    "por qué el rechazo duele tanto",
+    "la psicología de la primera impresión",
+    "cómo la falsa confianza engaña a todos",
+    "por qué las personas solitarias confían demasiado rápido",
+    "cómo tu móvil controla muchas de tus decisiones",
+    "por qué siempre dejas todo para después",
+    "la psicología del miedo a perderte algo",
+    "cómo los influencers manipulan tu atención",
+    "por qué algunas personas ponen a prueba tu confianza",
+    "la psicología de la venganza",
+    "por qué no puedes olvidar a ciertas personas",
+    "cómo el lenguaje corporal revela emociones ocultas",
+    "por qué la gente copia a las personas exitosas",
+    "la psicología de la ansiedad social",
+    "por qué tu mente se cree sus propias mentiras",
+    "cómo funciona realmente la manipulación emocional",
+    "por qué las personas atractivas reciben un trato diferente",
+    "cómo tu cerebro se vuelve adicto al scroll infinito",
+    "la psicología de la adicción a la dopamina",
+    "por qué tu confianza desaparece cerca de algunas personas",
+    "cómo la gente te juzga sin que te des cuenta",
+    "por qué ser misterioso hace que los demás piensen más en ti",
+    "la psicología de la dependencia emocional",
+    "por qué tu cerebro sabotea tus propios objetivos",
+    "cómo los amigos tóxicos manipulan sin que lo notes",
+    "por qué algunas personas se obsesionan cuando las rechazan",
+    "la psicología de las amistades falsas",
+    "por qué la confianza es en gran parte una ilusión",
+    "cómo otras personas pueden controlar tus emociones",
+    "por qué tu cerebro teme tanto ser ignorado",
+    "la psicología oscura del coqueteo",
+    "cómo el contacto visual cambia lo que los demás piensan de ti",
+    "por qué algunas personas siempre parecen tener el control",
+    "la psicología de pensar demasiado por la noche",
+    "cómo la manipulación se esconde detrás de la amabilidad",
+    "por qué tu cerebro se obsesiona con las relaciones imposibles"
 ]
 
 # Hooks que ABREN dopamina — prometen respuesta inmediata, crean tension
 DOPAMINE_HOOKS = [
-    "Stop. Your brain is doing this right now.",
-    "Most people realize this too late.",
-    "This happens to you every single day.",
-    "The second you understand this, everything changes.",
-    "You have been doing this your whole life without knowing.",
-    "Nobody warns you about this one.",
-    "This will make you question everything you think you know.",
-    "Your brain hides this from you on purpose.",
-    "Watch what your brain does in the next 30 seconds.",
-    "You are not going to like this, but you need to hear it.",
-    "This is the reason you feel stuck, and you never knew.",
-    "Pay attention. This changes after you see it.",
+    "Si haces esto... ya te están manipulando.",
+    "Tu cerebro te está engañando ahora mismo.",
+    "La mayoría descubre esto demasiado tarde.",
+    "Hay una razón por la que no puedes olvidarle.",
+    "Lo que voy a decir puede cambiar cómo ves a la gente.",
+    "Si alguien hace esto contigo... aléjate.",
+    "Esto explica por qué siempre vuelves a cometer el mismo error.",
+    "Tu mente hace esto todos los días sin que lo notes.",
+    "No confíes en alguien que haga esto.",
+    "Puede que hayas vivido esto hoy mismo.",
+    "Hay personas que saben controlar tu mente... y tú ni lo notas.",
+    "Si te cuesta decir que no... escucha esto.",
+    "La persona que más te manipula no siempre es quien imaginas.",
+    "Nunca ignores esta señal.",
+    "Tu cerebro está programado para caer en esta trampa.",
+    "Esto explica por qué algunas personas tienen tanto poder sobre ti.",
+    "Probablemente estás haciendo esto sin darte cuenta.",
+    "Después de saber esto... verás a la gente diferente.",
+    "Lo más peligroso de un manipulador es esto.",
+    "Nadie te avisa de este truco psicológico.",
+    "Si alguien hace esto... desconfía.",
+    "Esto explica por qué algunas personas parecen irresistibles.",
+    "Hay una razón por la que no puedes dejar de pensar en esa persona.",
+    "Este error está arruinando tus relaciones.",
+    "Tu cerebro prefiere una mentira antes que esta verdad.",
+    "La gente inteligente también cae en esta trampa.",
+    "Puede que estés confundiendo amor con manipulación.",
+    "Esto ocurre en casi todas las relaciones tóxicas.",
+    "Hay una técnica que usan para controlarte sin hablar.",
+    "Si siempre acabas decepcionado... escucha esto.",
+    "La mayoría nunca descubre por qué le pasa esto.",
+    "Esto explica por qué te dejan en visto.",
+    "Lo que sientes ahora mismo tiene una explicación.",
+    "Hay un detalle que casi nadie nota.",
+    "Si alguien desaparece y vuelve... hay una razón.",
+    "La psicología explica esto mejor de lo que imaginas.",
+    "Todo cambia cuando entiendes esto.",
+    "Después de escuchar esto, no volverás a confiar igual.",
+    "Tu mayor enemigo puede ser tu propia mente.",
+    "Este truco psicológico funciona con casi todo el mundo."
 ]
 
 def generate_script():
@@ -190,41 +250,137 @@ def generate_script():
     hook = random.choice(DOPAMINE_HOOKS)
     log.info(f"Topic: {topic}")
     log.info(f"Hook: {hook}")
+prompt = (
+    "Eres el mejor guionista del mundo para YouTube Shorts sobre psicología, manipulación, comportamiento humano y relaciones. "
+    "Tu objetivo NO es informar: tu objetivo es conseguir la máxima retención posible. "
+    "Cada frase debe hacer que el espectador NECESITE escuchar la siguiente. "
+    "Escribes vídeos que superan el 80% de retención y millones de visualizaciones.\n\n"
 
-    prompt = (
-        "You are a viral dark psychology YouTube Shorts scriptwriter. "
-        "Your videos get 70%+ retention because every second creates tension that PULLS the viewer forward.\n\n"
-        f"Topic: {topic}\n"
-        f"Scene 1 must open with exactly: '{hook}'\n\n"
-        "STRUCTURE — 7 scenes, one tight connected story:\n"
-        "- Scene 1: HOOK — the opening line above, then immediately state something shocking or counterintuitive about this topic\n"
-        "- Scene 2: THE MECHANISM — explain in plain words WHY this happens (one sentence, very specific)\n"
-        "- Scene 3: THE MOMENT — describe the exact real-life moment the viewer has experienced this (make it personal)\n"
-        "- Scene 4: THE HIDDEN CAUSE — the deeper psychological reason most people never realize\n"
-        "- Scene 5: THE COST — what it is silently taking from them right now\n"
-        "- Scene 6: THE SHIFT — the one thing that changes once they see this clearly\n"
-        "- Scene 7: THE HOOK CLOSE — end with a question that pulls them to comment OR rewatch (must connect back to scene 1)\n\n"
-        "PSYCHOLOGY RULES (mandatory):\n"
-        "- Create a KNOWLEDGE GAP in every scene: each line must make the viewer need the next one\n"
-        "- Use YOU/YOUR constantly — every line speaks directly to ONE person\n"
-        "- Each line must be 6-12 words MAX — short = faster pace = higher retention\n"
-        "- Use ... for spoken pauses that build tension\n"
-        "- NEVER say 'they never teach you this' or 'nobody talks about this' more than once\n"
-        "- Each image prompt: describe a SPECIFIC scene inspired by Monster anime (Naoki Urasawa) and Johan Liebert energy — "
-        "cold manipulative realistic faces, psychological thriller atmosphere, deep shadows, unsettling composition. "
-        "Match the exact emotion of that scene line. Something the viewer has NEVER seen — unexpected visual metaphor.\n"
-        "- Title: under 55 chars, makes someone stop mid-scroll, no emojis\n\n"
-        "Return ONLY raw JSON:\n"
-        "{\n"
-        "  \"title\": \"...\",\n"
-        "  \"description\": \"...\",\n"
-        "  \"tags\": [\"darkpsychology\",\"psychology\",\"mindcontrol\",\"manipulation\",\"shorts\",\"brain\",\"facts\",\"awareness\",\"secrets\",\"mindset\"],\n"
-        "  \"scenes\": [\n"
-        "    {\"text\": \"...\", \"prompt\": \"dark anime art, [striking specific scene matching this exact emotion], dramatic chiaroscuro, 8k, no text, no watermark\"},\n"
-        "    ... (exactly 7 scenes)\n"
-        "  ]\n"
-        "}"
-    )
+    f"TEMA: {topic}\n"
+    f"LA PRIMERA ESCENA DEBE EMPEZAR EXACTAMENTE CON:\n'{hook}'\n\n"
+
+    "========================\n"
+    "ESTRUCTURA OBLIGATORIA\n"
+    "========================\n"
+
+    "ESCENA 1 (GANCHO)\n"
+    "- Empieza EXACTAMENTE con el hook indicado.\n"
+    "- Después añade una afirmación sorprendente.\n"
+    "- Haz que el espectador piense: '¿Cómo?'.\n"
+
+    "ESCENA 2 (EL PORQUÉ)\n"
+    "- Explica de forma sencilla qué ocurre psicológicamente.\n"
+
+    "ESCENA 3 (IDENTIFICACIÓN)\n"
+    "- Describe una situación cotidiana que casi cualquiera haya vivido.\n"
+    "- El espectador debe sentirse identificado inmediatamente.\n"
+
+    "ESCENA 4 (REVELACIÓN)\n"
+    "- Cuenta la verdadera razón que la mayoría desconoce.\n"
+    "- Debe sentirse como un secreto.\n"
+
+    "ESCENA 5 (CONSECUENCIAS)\n"
+    "- Explica cómo afecta esto a la vida, relaciones o decisiones.\n"
+
+    "ESCENA 6 (CAMBIO)\n"
+    "- Da una reflexión que haga cambiar la forma de pensar del espectador.\n"
+
+    "ESCENA 7 (FINAL)\n"
+    "- Termina con una pregunta muy potente que invite a comentar.\n"
+    "- La pregunta debe hacer que muchas personas quieran responder.\n\n"
+
+    "========================\n"
+    "REGLAS OBLIGATORIAS\n"
+    "========================\n"
+
+    "- Escribe TODO en español.\n"
+    "- Utiliza SIEMPRE 'tú' y 'tu'.\n"
+    "- Cada escena debe tener entre 6 y 12 palabras.\n"
+    "- Frases muy fáciles de entender.\n"
+    "- Nada de lenguaje académico.\n"
+    "- Nada de párrafos largos.\n"
+    "- Cada frase debe dejar una pregunta sin responder.\n"
+    "- Nunca repitas información.\n"
+    "- Cada escena debe aportar algo nuevo.\n"
+    "- El tono debe ser misterioso, intenso y emocional.\n"
+    "- Haz que parezca un secreto que pocos conocen.\n"
+    "- No inventes datos científicos falsos.\n"
+    "- No uses palabras complicadas.\n"
+    "- Evita frases vacías como 'todo cambia', 'nadie habla de esto' o 'te sorprenderá'.\n"
+    "- No uses emojis.\n"
+    "- No pongas introducciones ni despedidas.\n"
+
+    "========================\n"
+    "RETENCIÓN\n"
+    "========================\n"
+
+    "- Cada escena debe generar curiosidad por la siguiente.\n"
+    "- El espectador nunca debe sentir que el vídeo ya terminó.\n"
+    "- Alterna frases cortas con pausas usando '...'.\n"
+    "- Utiliza preguntas implícitas.\n"
+    "- Haz que el espectador piense constantemente '¿por qué?'.\n"
+    "- Crea tensión desde el primer segundo.\n"
+    "- Haz que el final obligue a comentar.\n"
+
+    "========================\n"
+    "PROMPTS DE IMAGEN\n"
+    "========================\n"
+
+    "- Los prompts SIEMPRE en inglés.\n"
+    "- Muy detallados.\n"
+    "- Estilo Monster de Naoki Urasawa.\n"
+    "- Inspiración Johan Liebert.\n"
+    "- Anime psicológico.\n"
+    "- Suspense.\n"
+    "- Sombras profundas.\n"
+    "- Cinematic lighting.\n"
+    "- Ultra detailed.\n"
+    "- Realistic anime.\n"
+    "- No text.\n"
+    "- No watermark.\n"
+    "- Cada imagen debe representar EXACTAMENTE la emoción de esa escena.\n"
+
+    "========================\n"
+    "TÍTULO\n"
+    "========================\n"
+
+    "- Máximo 55 caracteres.\n"
+    "- Debe generar curiosidad inmediata.\n"
+    "- No clickbait absurdo.\n"
+    "- Debe hacer que alguien deje de hacer scroll.\n"
+
+    "========================\n"
+    "DESCRIPCIÓN\n"
+    "========================\n"
+
+    "- Una o dos frases.\n"
+    "- Corta.\n"
+    "- Curiosa.\n"
+
+    "========================\n"
+    "FORMATO DE RESPUESTA\n"
+    "========================\n"
+
+    "Devuelve ÚNICAMENTE un JSON válido con este formato:\n\n"
+
+    "{\n"
+    "  \"title\": \"...\",\n"
+    "  \"description\": \"...\",\n"
+    "  \"tags\": [\"psicología\",\"psicología oscura\",\"mente\",\"cerebro\",\"manipulación\",\"relaciones\",\"curiosidades\",\"shorts\"],\n"
+    "  \"scenes\": [\n"
+    "      {\n"
+    "          \"text\": \"...\",\n"
+    "          \"prompt\": \"dark anime, Monster anime style, Johan Liebert aesthetic, cinematic psychological thriller, ultra detailed, dramatic lighting, realistic anime, no text, no watermark\"\n"
+    "      }\n"
+    "  ]\n"
+    "}\n\n"
+
+    "No escribas explicaciones.\n"
+    "No escribas comentarios.\n"
+    "No uses markdown.\n"
+    "No pongas ```.\n"
+    "Devuelve únicamente el JSON."
+)
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}],
@@ -264,18 +420,46 @@ def generate_script():
 
 def fallback_script():
     return {
-        "title": "Your Brain Hides This From You Every Day",
-        "description": "The hidden psychological loop that quietly controls your every decision.",
-        "tags": ["darkpsychology","manipulation","mindcontrol","psychology","shorts","facts","brain","mindset","secrets","awareness"],
-        "scenes": [
-            {"text": "Stop. Your brain is doing this right now.", "prompt": "dark anime art, glowing human brain with shadowy hand pulling hidden levers inside it, dramatic red light, 8k, no text"},
-            {"text": "It filters reality... to protect your ego.", "prompt": "dark anime art, person looking through keyhole seeing distorted version of world outside, 8k, no text"},
-            {"text": "Remember the last time you were proven wrong... and refused to believe it.", "prompt": "dark anime art, figure standing in denial as dark truth hovers visibly behind them, 8k, no text"},
-            {"text": "Your brain rewrites that memory... to make you the hero.", "prompt": "dark anime art, film reel being secretly edited by shadow hands, frames changing mid-roll, 8k, no text"},
-            {"text": "This costs you every relationship... every opportunity you cannot see clearly.", "prompt": "dark anime art, person surrounded by doors all closing simultaneously, lone figure in center, 8k, no text"},
-            {"text": "The moment you question your own story... reality finally comes into focus.", "prompt": "dark anime art, cracked mirror revealing true clear reflection underneath the distortion, 8k, no text"},
-            {"text": "So when did your brain last lie to you... and you just let it?", "prompt": "dark anime art, warrior facing their own shadow self in golden confrontational light, epic cinematic, 8k, no text"},
+        "title": "La verdad que tu cerebro te oculta",
+        "description": "Descubre el mecanismo psicológico que influye en tus decisiones sin que te des cuenta.",
+        "tags": [
+            "psicología","psicología oscura","mente","cerebro","manipulación",
+            "narcisistas","relaciones","amor","autoestima","ansiedad",
+            "curiosidades","datos curiosos","hechos psicológicos",
+            "psicología humana","lenguaje corporal",
+            "comportamiento humano","desarrollo personal",
+            "motivación","reflexión","shorts"
         ],
+        "scenes": [
+            {
+                "text": "Tu cerebro te está engañando ahora mismo.",
+                "prompt": "ilustración anime oscura de un cerebro brillante siendo manipulado por manos en las sombras, estilo Monster, iluminación dramática, sin texto"
+            },
+            {
+                "text": "Filtra la realidad para proteger tu ego.",
+                "prompt": "persona observando el mundo a través de una cerradura, realidad distorsionada, anime psicológico, estilo Monster, sin texto"
+            },
+            {
+                "text": "Recuerda la última vez que te equivocaste.",
+                "prompt": "persona negando una verdad evidente mientras una sombra observa detrás, atmósfera psicológica, anime oscuro"
+            },
+            {
+                "text": "Tu mente cambia los recuerdos para hacerte sentir mejor.",
+                "prompt": "carrete de película siendo modificado por manos oscuras, anime de suspense psicológico, sin texto"
+            },
+            {
+                "text": "Eso afecta a tus relaciones sin que lo notes.",
+                "prompt": "persona rodeada de puertas que se cierran lentamente, ambiente oscuro, anime psicológico"
+            },
+            {
+                "text": "Todo cambia cuando cuestionas tu propia historia.",
+                "prompt": "espejo roto mostrando una versión real detrás del reflejo falso, estilo Monster, iluminación cinematográfica"
+            },
+            {
+                "text": "¿Cuántas veces tu mente te ha mentido hoy?",
+                "prompt": "persona enfrentándose a su propia sombra, anime psicológico, ambiente inquietante, sin texto"
+            }
+        ]
     }
 
 # ═══════════════════════════════════════════════════════════

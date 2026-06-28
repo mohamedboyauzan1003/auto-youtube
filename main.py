@@ -26,17 +26,25 @@ SCRIPT_RETRIES     = 5
 UPLOAD_RETRIES     = 3
 TTS_RETRIES        = 4
 
+# ── DURACIÓN OBJETIVO ──────────────────────────────────────
+TARGET_MIN_S       = 10.0
+TARGET_MAX_S       = 12.0
+SCENE_MAX_WORDS    = 7      # máximo palabras por frase (era 10 antes)
+SCENE_TARGET_DUR_S = 2.0    # duración objetivo por escena (10s / 5 escenas)
+SCENE_MAX_DUR_S    = 2.3    # límite duro por escena
+
 # Velocidad/tono variable por posicion de escena (estructura AGRT)
-# 0=ALARMA: lenta y grave | 1=GAP: rapida | 2=REVELACION: la mas lenta y grave
-# 3=CONSECUENCIA: normal  | 4=TRAMPA: pausa inicial + lenta
+# Rates subidos para que 6-7 palabras duren ~1.6-1.9s de forma natural
+# 0=ALARMA: grave | 1=GAP: rapida | 2=REVELACION: la mas lenta y grave
+# 3=CONSECUENCIA: normal  | 4=TRAMPA: ligeramente mas lenta
 VOICE_CONFIG_BY_SCENE = {
-    0: {"voice": "es-ES-AlvaroNeural", "rate": "+12%", "pitch": "-8Hz",  "volume": "+35%"},
-    1: {"voice": "es-ES-AlvaroNeural", "rate": "+22%", "pitch": "-5Hz",  "volume": "+30%"},
-    2: {"voice": "es-ES-AlvaroNeural", "rate": "+10%", "pitch": "-10Hz", "volume": "+32%"},
-    3: {"voice": "es-ES-AlvaroNeural", "rate": "+20%", "pitch": "-5Hz",  "volume": "+30%"},
-    4: {"voice": "es-ES-AlvaroNeural", "rate": "+12%", "pitch": "-6Hz",  "volume": "+33%"},
+    0: {"voice": "es-ES-AlvaroNeural", "rate": "+22%", "pitch": "-8Hz",  "volume": "+35%"},
+    1: {"voice": "es-ES-AlvaroNeural", "rate": "+30%", "pitch": "-5Hz",  "volume": "+30%"},
+    2: {"voice": "es-ES-AlvaroNeural", "rate": "+18%", "pitch": "-10Hz", "volume": "+32%"},
+    3: {"voice": "es-ES-AlvaroNeural", "rate": "+28%", "pitch": "-5Hz",  "volume": "+30%"},
+    4: {"voice": "es-ES-AlvaroNeural", "rate": "+20%", "pitch": "-6Hz",  "volume": "+33%"},
 }
-FALLBACK_VOICE = {"voice": "es-ES-AlvaroNeural", "rate": "+15%", "pitch": "-5Hz", "volume": "+30%"}
+FALLBACK_VOICE = {"voice": "es-ES-AlvaroNeural", "rate": "+25%", "pitch": "-5Hz", "volume": "+30%"}
 
 SUBTITLE_THEMES = [
     {"name": "blood_red",    "highlight": (220,15,15,230),   "accent": (220,15,15,255),  "label": (220,20,20,255)},
@@ -352,25 +360,25 @@ def generate_script():
         "FORMATO OBLIGATORIO: 5 frases, estructura AGRT.\n\n"
         "FRASE 1 - ALARMA: usa el hook exacto de arriba.\n"
         "Crea incomodidad inmediata. El espectador debe parar el scroll.\n\n"
-        "FRASE 2 - GAP (6-8 palabras):\n"
+        "FRASE 2 - GAP (5-7 palabras):\n"
         "Amplia el gancho pero NO lo expliques.\n"
         "El espectador debe pensar: como? por que? a mi?\n\n"
-        "FRASE 3 - REVELACION (7-9 palabras):\n"
+        "FRASE 3 - REVELACION (5-7 palabras):\n"
         "La verdad inesperada. Contradice lo que el espectador creia.\n"
         "Empieza con: Tu cerebro... / Lo llaman... / La razon es... / Eso se llama...\n"
         "Usa '...' en esta frase para la pausa dramatica.\n\n"
-        "FRASE 4 - CONSECUENCIA (6-8 palabras):\n"
+        "FRASE 4 - CONSECUENCIA (5-7 palabras):\n"
         "Conecta la revelacion con la vida del espectador AHORA MISMO.\n"
         "Usa: cada vez que / hoy mismo / en este momento / sin que lo notes.\n\n"
-        "FRASE 5 - TRAMPA (5-8 palabras):\n"
+        "FRASE 5 - TRAMPA (5-7 palabras):\n"
         "Elige UNA opcion:\n"
         "A) Pregunta directa y personal que solo se responde en comentarios.\n"
         "B) Afirmacion que genera disonancia y obliga a rebobinar.\n"
         "NUNCA termines con dale like ni sigueme.\n\n"
         "REGLAS ABSOLUTAS:\n"
         "- TODO en espanol, tutear siempre\n"
-        "- Cada frase: 5-9 palabras MAXIMO\n"
-        "- Total del guion: 30-42 palabras\n"
+        "- Cada frase: 5-7 palabras MAXIMO. Nunca 8 o mas.\n"
+        "- Total del guion: 25-35 palabras\n"
         "- Cero palabras academicas\n"
         "- Cero relleno: en realidad, de hecho, basicamente\n"
         "- Una sola idea por frase\n"
@@ -437,12 +445,12 @@ def generate_script():
                 script["scenes"].append(random.choice(script["scenes"]).copy())
             script["scenes"] = script["scenes"][:NUM_SCENES]
             script["_topic"] = topic
-            # Recortar frases que excedan 10 palabras
+            # Recortar frases para garantizar duración objetivo de escena
             for i, scene in enumerate(script["scenes"]):
                 words = scene["text"].split()
-                if len(words) > 10:
-                    scene["text"] = " ".join(words[:9])
-                    log.warning(f"Frase {i+1} recortada a 9 palabras")
+                if len(words) > SCENE_MAX_WORDS:
+                    scene["text"] = " ".join(words[:SCENE_MAX_WORDS])
+                    log.warning(f"Frase {i+1} recortada a {SCENE_MAX_WORDS} palabras: {scene['text']}")
             log.success(f"Script OK: {script['title']} ({len(script['scenes'])} escenas)")
             return script
         except json.JSONDecodeError as e:
@@ -460,15 +468,15 @@ def fallback_script():
             "description": "El mecanismo psicologico que toma decisiones por ti sin que lo sepas.",
             "tags": ["psicologia","mente","cerebro","manipulacion","relaciones","autoestima","shorts","viral","jovenes","comportamiento"],
             "scenes": [
-                {"text": "Tu cerebro te miente varias veces al dia.",
+                {"text": "Tu cerebro te miente cada dia.",
                  "prompt": "Extreme close-up young man 20yo face, eyes wide with sudden realization, invisible puppet strings glowing red attached to temples, dark bedroom lit only by cold blue phone screen, psychological thriller, cinematic, 8k, ultra detailed, masterpiece, no text, no watermark, 9:16 vertical"},
-                {"text": "Y lo peor es que no puedes detectarlo.",
+                {"text": "Y no puedes detectarlo.",
                  "prompt": "Medium shot young woman 19yo sitting on bed, hands covering face partially, distorted reflection in phone screen showing different expression, neon blue bedroom light, emotional, cinematic, ultra detailed, masterpiece, no text, 9:16 vertical"},
-                {"text": "Tu mente reescribe los recuerdos... para protegerte.",
+                {"text": "Tu mente reescribe recuerdos... para protegerte.",
                  "prompt": "Dutch angle young person 21yo in dark corridor, film reel unspooling from their head with different memory frames visible, moody purple light, psychological surrealism, cinematic, 8k, masterpiece, no text, 9:16 vertical"},
-                {"text": "Por eso siempre te ves como el heroe.",
+                {"text": "Por eso siempre eres el heroe.",
                  "prompt": "Over-the-shoulder shot young man 20yo looking at group of friends, his shadow on wall shows him larger and central while real shadow is small, urban park night, neon street light, cinematic, ultra detailed, no text, 9:16 vertical"},
-                {"text": "Cuantas veces te ha mentido solo hoy?",
+                {"text": "Cuantas veces te mintio hoy?",
                  "prompt": "Young woman 21yo direct intense eye contact with camera, calm knowing expression, slight half-smile, dark urban rooftop night, city lights blurred behind, dramatic single spotlight, masterpiece, 8k, cinematic, no text, 9:16 vertical"},
             ],
         },
@@ -477,15 +485,15 @@ def fallback_script():
             "description": "La verdad psicologica detras de desaparecer sin dar explicaciones.",
             "tags": ["psicologia","ghosting","relaciones","mente","cerebro","manipulacion","shorts","viral","jovenes","comportamiento"],
             "scenes": [
-                {"text": "No desaparecio sin razon. Calculo el momento.",
+                {"text": "No desaparecio sin razon. Calculo.",
                  "prompt": "Extreme close-up young woman 20yo eyes staring at phone screen showing last message sent days ago, cold blue light on face, clock hands visible faintly superimposed, cinematic, 8k, ultra detailed, masterpiece, no text, no watermark, 9:16 vertical"},
-                {"text": "Y eso es mucho peor que el abandono.",
+                {"text": "Es peor que el abandono.",
                  "prompt": "Medium shot young man 19yo at subway late night, empty car, ghost silhouette of person sitting next to him fading into air, purple moody light, psychological thriller, cinematic, masterpiece, no text, 9:16 vertical"},
-                {"text": "El ghosting activa el mismo dolor... que una perdida real.",
+                {"text": "Activa el mismo dolor... que una perdida.",
                  "prompt": "Dutch angle young person 21yo clutching chest, visible heartbeat pulse radiating outward like sonar waves, dark apartment single overhead lamp, psychological symbolism, 8k, cinematic, ultra detailed, no text, 9:16 vertical"},
-                {"text": "Tu cerebro busca el cierre que no llego.",
+                {"text": "Tu cerebro busca cierre que no llego.",
                  "prompt": "POV shot hands holding phone with unanswered conversation thread, cold screen light illuminating hands dramatically, urban cafe window rain outside, cinematic, ultra detailed, masterpiece, no text, 9:16 vertical"},
-                {"text": "Cuantos dias llevas esperando esa respuesta?",
+                {"text": "Cuantos dias llevas esperando?",
                  "prompt": "Young woman 20yo direct camera stare, calm but eyes holding back emotion, rooftop night city lights below, warm golden backlight contrasting cold blue phone glow, cinematic portrait, 8k, masterpiece, no text, 9:16 vertical"},
             ],
         },
@@ -494,7 +502,7 @@ def fallback_script():
             "description": "Las tecnicas de manipulacion silenciosa que se usan en relaciones cotidianas.",
             "tags": ["psicologia","manipulacion","relaciones","mente","cerebro","autoestima","shorts","viral","jovenes","comportamiento"],
             "scenes": [
-                {"text": "Alguien te esta manipulando ahora mismo sin saberlo.",
+                {"text": "Alguien te manipula ahora mismo.",
                  "prompt": "Extreme close-up young man 20yo face, micro-expression of unease mixed with affection, invisible hand pressing gently on his chest from outside frame, dark bedroom warm amber light turning cold blue, cinematic, 8k, masterpiece, no text, no watermark, 9:16 vertical"},
                 {"text": "Y probablemente lo llamas carino.",
                  "prompt": "Medium shot young couple 19-21yo, she smiling warmly at him, his shadow on wall behind forms controlling silhouette with strings, warm apartment light with cold edge, psychological thriller, cinematic, ultra detailed, no text, 9:16 vertical"},
@@ -748,7 +756,7 @@ def zoom_frame(base_img, t, duration):
     return base_img.crop((left,top,left+nw,top+nh)).resize((w,h), Image.LANCZOS)
 
 # ═══════════════════════════════════════════════════════════
-#  TTS — velocidad y tono variables por escena
+#  TTS — velocidad y tono variables por escena, con control de duración
 # ═══════════════════════════════════════════════════════════
 def _ensure_signed(v):
     return v if v.startswith(("+","-")) else f"+{v}"
@@ -762,27 +770,12 @@ async def _synth(text, path, rate, pitch, volume):
     )
     await tts.save(path)
 
-def _prepend_silence(audio_path, silence_s=0.3):
-    """Añade silencio al inicio del audio (para la escena trampa final)."""
-    try:
-        import struct, wave as wv
-        sr = 44100; samples = int(sr * silence_s)
-        silence_data = struct.pack("<" + "h" * samples, *([0] * samples))
-        sil_path = audio_path + "_silence.wav"
-        with wv.open(sil_path, "w") as wf:
-            wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
-            wf.writeframes(silence_data)
-        out_path = audio_path + "_padded.mp3"
-        cmd = ["ffmpeg", "-y",
-               "-i", sil_path, "-i", audio_path,
-               "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1[aout]",
-               "-map", "[aout]", "-c:a", "libmp3lame", out_path]
-        result = subprocess.run(cmd, capture_output=True, timeout=20)
-        if result.returncode == 0:
-            import shutil; shutil.move(out_path, audio_path)
-        Path(sil_path).unlink(missing_ok=True)
-    except Exception as e:
-        log.warning(f"prepend_silence fallo: {e}")
+def _bump_rate(rate_str, delta_pct):
+    """Sube el rate TTS en delta_pct puntos. Ej: '+22%' + 8 -> '+30%'. Tope en +45%."""
+    sign = 1 if rate_str.startswith("+") else -1
+    val = int(rate_str.replace("+","").replace("-","").replace("%",""))
+    new_val = min(45, val + delta_pct) if sign > 0 else max(0, val - delta_pct)
+    return f"+{new_val}%"
 
 def _audio_duration_ok(path, text):
     try:
@@ -791,8 +784,13 @@ def _audio_duration_ok(path, text):
     except: return False, 0
 
 def synth_one(text, index):
+    """
+    Genera TTS con control de duración.
+    Si el audio supera SCENE_MAX_DUR_S, reintenta con rate más alto
+    hasta un máximo de +45% antes de truncar texto.
+    Eliminamos el silencio prepend — ya no es necesario.
+    """
     config = VOICE_CONFIG_BY_SCENE.get(index, FALLBACK_VOICE)
-    add_silence = (index == NUM_SCENES - 1)  # pausa de 0.3s en escena trampa
 
     key = hashlib.md5((text + str(index)).encode()).hexdigest()[:12]
     cache_path = str(CACHE_DIR / "audio" / f"{key}.mp3")
@@ -800,32 +798,44 @@ def synth_one(text, index):
 
     if Path(cache_path).exists() and Path(cache_path).stat().st_size > min_bytes:
         ok, dur = _audio_duration_ok(cache_path, text)
-        if ok:
+        if ok and dur <= SCENE_MAX_DUR_S:
             import shutil; shutil.copy(cache_path, out_path)
             log.info(f"Audio {index+1} desde cache ({dur:.1f}s)"); return out_path
+        elif ok and dur > SCENE_MAX_DUR_S:
+            log.warning(f"Cache audio {index+1} demasiado largo ({dur:.1f}s) — regenerando")
+
+    # Escalera de rates: si el audio sale largo, subimos velocidad progresivamente
+    rate_ladder = [
+        config["rate"],
+        _bump_rate(config["rate"], +8),
+        _bump_rate(config["rate"], +15),
+        _bump_rate(config["rate"], +22),
+    ]
 
     for attempt in range(TTS_RETRIES):
-        use_fallback = attempt >= 2
+        use_fallback = attempt >= 3
         try:
             if Path(out_path).exists(): os.remove(out_path)
-            v = FALLBACK_VOICE if use_fallback else config
+            v = dict(FALLBACK_VOICE if use_fallback else config)
+            if attempt < len(rate_ladder):
+                v["rate"] = rate_ladder[attempt]
             asyncio.run(_synth(text, out_path, v["rate"], v["pitch"], v["volume"]))
             p = Path(out_path)
             if not p.exists() or p.stat().st_size < min_bytes:
-                log.warning(f"Audio {index+1} muy pequeno, reintento {attempt+1}..."); time.sleep(2+attempt); continue
+                log.warning(f"Audio {index+1} muy pequeño, reintento {attempt+1}..."); time.sleep(2); continue
             ok, dur = _audio_duration_ok(out_path, text)
-            if ok:
-                if add_silence:
-                    _prepend_silence(out_path, 0.3)
-                import shutil; shutil.copy(out_path, cache_path)
-                log.success(f"Audio {index+1} OK | rate={v['rate']} pitch={v['pitch']} | {dur:.1f}s")
-                return out_path
-            log.warning(f"Audio {index+1} muy corto ({dur:.1f}s), reintento {attempt+1}...")
+            if not ok:
+                log.warning(f"Audio {index+1} muy corto ({dur:.1f}s), reintento {attempt+1}..."); time.sleep(2); continue
+            if dur > SCENE_MAX_DUR_S and attempt < TTS_RETRIES - 1:
+                log.warning(f"Audio {index+1} largo ({dur:.1f}s) con rate={v['rate']} — acelerando..."); continue
+            import shutil; shutil.copy(out_path, cache_path)
+            log.success(f"Audio {index+1} OK | rate={v['rate']} pitch={v['pitch']} | {dur:.1f}s")
+            return out_path
         except Exception as e:
             log.warning(f"Audio {index+1} intento {attempt+1}: {e}")
-        time.sleep(2+attempt)
+        time.sleep(2 + attempt)
 
-    log.error(f"Audio {index+1} fallo — silencio"); _make_silence(out_path, 2.0); return out_path
+    log.error(f"Audio {index+1} falló — silencio"); _make_silence(out_path, 1.5); return out_path
 
 def synth_all_sequential(scenes):
     paths = {}
@@ -919,28 +929,46 @@ def get_background_music(duration, mood=None):
     return generate_music(duration=duration, mood=mood), "synthetic"
 
 # ═══════════════════════════════════════════════════════════
-#  BUILD SCENE — silencio visual +1.2s en escena final (loop)
+#  BUILD SCENE — sin silencios extra, con límite duro por escena
 # ═══════════════════════════════════════════════════════════
 def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
     audio = AudioFileClip(audio_path)
-    # Escena trampa: +1.2s de imagen estática sin voz para favorecer el loop
-    extra_silence = 1.2 if scene_idx == total_scenes - 1 else 0.0
-    duration = max(audio.duration + 0.6 + extra_silence, MIN_AUDIO_S + 0.5)
-    total_frames = int(duration*FPS)
+    audio_dur = audio.duration
+
+    # Sin silencio extra — el control de duración lo hace synth_one
+    # Padding mínimo de 0.25s para que el subtítulo se vea completo al final
+    padding = 0.25
+    duration = min(audio_dur + padding, SCENE_MAX_DUR_S)
+
+    # Si el audio ya supera el límite duro, lo recortamos (último recurso)
+    if audio_dur > SCENE_MAX_DUR_S:
+        log.warning(f"  Escena {scene_idx+1}: audio {audio_dur:.1f}s > limite {SCENE_MAX_DUR_S}s — recortando")
+        audio = audio.subclip(0, SCENE_MAX_DUR_S - 0.1)
+        audio_dur = audio.duration
+        duration = SCENE_MAX_DUR_S
+
+    total_frames = int(duration * FPS)
     words = text.split(); total_words = len(words)
-    reveal_frames = int(FPS * 0.9)   # revelacion de palabras mas rapida en shorts cortos
-    log.info(f"  Escena {scene_idx+1}: {total_frames}f / {duration:.1f}s / {total_words}p")
+    reveal_frames = int(FPS * 0.75)  # revelación más rápida para Shorts cortos
+    log.info(f"  Escena {scene_idx+1}: {total_frames}f / {duration:.1f}s / {total_words}p / audio={audio_dur:.1f}s")
+
     frames = []
     for f in range(total_frames):
-        t = f/FPS; zoomed = zoom_frame(base_img, t, duration); base_arr = np.array(zoomed)
-        wp = min(total_words, int(total_words*(f/reveal_frames))) if f < reveal_frames else total_words
+        t = f / FPS
+        zoomed = zoom_frame(base_img, t, duration)
+        base_arr = np.array(zoomed)
+        wp = min(total_words, int(total_words * (f / reveal_frames))) if f < reveal_frames else total_words
         frame = render_text_frame(base_arr, text, wp, f, scene_idx, total_scenes)
-        if f < 5: frame = glitch_frame(frame, intensity=5)
+        if f < 5:
+            frame = glitch_frame(frame, intensity=5)
         frames.append(frame.astype(np.uint8))
-    def make_frame(t): return frames[min(int(t*FPS), len(frames)-1)]
+
+    def make_frame(t):
+        return frames[min(int(t * FPS), len(frames) - 1)]
+
     clip = VideoClip(make_frame, duration=duration)
     clip = clip.set_audio(audio)
-    return clip.fadein(0.2).fadeout(0.2)
+    return clip.fadein(0.15).fadeout(0.15)
 
 # ═══════════════════════════════════════════════════════════
 #  CHECKLIST
@@ -982,7 +1010,14 @@ def build_video(scenes):
         clips.append(build_scene(base_img, audio_paths[i], scene["text"], i, total))
     final = concatenate_videoclips(clips, method="compose")
     final_duration = final.duration
-    log.info(f"Duracion total: {final_duration:.1f}s")
+
+    # Control global de duración — aviso y log si nos salimos del rango
+    if final_duration < TARGET_MIN_S:
+        log.warning(f"Video corto ({final_duration:.1f}s < {TARGET_MIN_S}s) — revisa TTS")
+    elif final_duration > TARGET_MAX_S:
+        log.warning(f"Video largo ({final_duration:.1f}s > {TARGET_MAX_S}s) — revisa longitud de frases")
+    else:
+        log.success(f"Duracion OK: {final_duration:.1f}s (objetivo {TARGET_MIN_S}-{TARGET_MAX_S}s)")
 
     voice_only = "viral_short_voice_only.mp4"
     log.info("Renderizando video con voz...")

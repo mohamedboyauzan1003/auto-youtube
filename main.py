@@ -16,22 +16,26 @@ from edge_tts import Communicate
 # ═══════════════════════════════════════════════════════════
 W, H       = 1080, 1920
 FPS        = 30
-NUM_SCENES = 7
-MIN_AUDIO_S        = 1.5
+NUM_SCENES = 5          # 5 escenas x ~2s = 10-12s total
+MIN_AUDIO_S        = 1.2
 MIN_IMAGE_KB       = 15
-MIN_VIDEO_DURATION = 20
-MAX_VIDEO_DURATION = 45
+MIN_VIDEO_DURATION = 9
+MAX_VIDEO_DURATION = 15
 IMAGE_RETRIES      = 4
 SCRIPT_RETRIES     = 5
 UPLOAD_RETRIES     = 3
 TTS_RETRIES        = 4
 
-# Voces en español nativas
-VOICE_POOL = [
-    {"voice": "es-ES-AlvaroNeural", "rate": "+15%", "pitch": "-5Hz",  "volume": "+30%"},
-    {"voice": "es-ES-AlvaroNeural", "rate": "+20%", "pitch": "-8Hz",  "volume": "+30%"},
-    {"voice": "es-ES-AlvaroNeural", "rate": "+12%", "pitch": "-3Hz",  "volume": "+28%"},
-]
+# Velocidad/tono variable por posicion de escena (estructura AGRT)
+# 0=ALARMA: lenta y grave | 1=GAP: rapida | 2=REVELACION: la mas lenta y grave
+# 3=CONSECUENCIA: normal  | 4=TRAMPA: pausa inicial + lenta
+VOICE_CONFIG_BY_SCENE = {
+    0: {"voice": "es-ES-AlvaroNeural", "rate": "+12%", "pitch": "-8Hz",  "volume": "+35%"},
+    1: {"voice": "es-ES-AlvaroNeural", "rate": "+22%", "pitch": "-5Hz",  "volume": "+30%"},
+    2: {"voice": "es-ES-AlvaroNeural", "rate": "+10%", "pitch": "-10Hz", "volume": "+32%"},
+    3: {"voice": "es-ES-AlvaroNeural", "rate": "+20%", "pitch": "-5Hz",  "volume": "+30%"},
+    4: {"voice": "es-ES-AlvaroNeural", "rate": "+12%", "pitch": "-6Hz",  "volume": "+33%"},
+}
 FALLBACK_VOICE = {"voice": "es-ES-AlvaroNeural", "rate": "+15%", "pitch": "-5Hz", "volume": "+30%"}
 
 SUBTITLE_THEMES = [
@@ -42,14 +46,10 @@ SUBTITLE_THEMES = [
     {"name": "gold",         "highlight": (230,170,20,230),  "accent": (230,170,20,255), "label": (240,190,40,255)},
 ]
 
-_chosen_voice = random.choice(VOICE_POOL)
-_chosen_theme = random.choice(SUBTITLE_THEMES)
-VOICE        = _chosen_voice["voice"]
-VOICE_RATE   = _chosen_voice["rate"]
-VOICE_PITCH  = _chosen_voice["pitch"]
-VOICE_VOLUME = _chosen_voice["volume"]
-THEME        = _chosen_theme
-_ZOOM_INTENSITY = random.uniform(0.04, 0.08)
+_chosen_theme    = random.choice(SUBTITLE_THEMES)
+VOICE            = "es-ES-AlvaroNeural"
+THEME            = _chosen_theme
+_ZOOM_INTENSITY  = random.uniform(0.02, 0.04)   # sutil para videos cortos
 
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
@@ -81,8 +81,8 @@ sh = logging.StreamHandler(); sh.setFormatter(ColorLog("%(message)s")); log.addH
 fh = logging.FileHandler(LOG_DIR / f"{time.strftime('%Y-%m-%d')}.log")
 fh.setFormatter(logging.Formatter("[%(levelname)s] %(asctime)s %(message)s")); log.addHandler(fh)
 
-log.info(f"Voz: {VOICE} (rate={VOICE_RATE})")
-log.info(f"Tema: {THEME['name']}")
+log.info(f"Voz: {VOICE} (config variable por escena)")
+log.info(f"Tema visual: {THEME['name']}")
 
 # ═══════════════════════════════════════════════════════════
 #  UPLOAD GUARD
@@ -115,7 +115,7 @@ def update_upload_guard(video_id):
         log.warning(f"No se pudo actualizar guard: {e}")
 
 # ═══════════════════════════════════════════════════════════
-#  TEMAS — psicologia para jovenes 16-24
+#  TEMAS
 # ═══════════════════════════════════════════════════════════
 TOPICS = [
     "por que la gente pierde el interes en ti",
@@ -180,41 +180,153 @@ TOPICS = [
     "como tu cerebro inventa conversaciones que nunca ocurrieron",
 ]
 
-DOPAMINE_HOOKS = [
-    "Si haces esto... ya te estan manipulando.",
-    "Tu cerebro te esta enganando ahora mismo.",
-    "La mayoria descubre esto demasiado tarde.",
-    "Hay una razon por la que no puedes olvidarle.",
-    "Lo que voy a decir puede cambiar como ves a la gente.",
-    "Si alguien hace esto contigo... alejate.",
-    "Esto explica por que siempre vuelves a cometer el mismo error.",
-    "Tu mente hace esto todos los dias sin que lo notes.",
-    "No confies en alguien que haga esto.",
-    "Puede que hayas vivido esto hoy mismo.",
-    "Hay personas que saben controlar tu mente... y tu ni lo notas.",
-    "Si te cuesta decir que no... escucha esto.",
-    "La persona que mas te manipula no siempre es quien imaginas.",
-    "Nunca ignores esta senal.",
-    "Tu cerebro esta programado para caer en esta trampa.",
-    "Esto explica por que algunas personas tienen tanto poder sobre ti.",
-    "Probablemente estas haciendo esto sin darte cuenta.",
-    "Despues de saber esto... veras a la gente diferente.",
-    "Lo mas peligroso de un manipulador es esto.",
-    "Nadie te avisa de este truco psicologico.",
-    "Si alguien hace esto... desconfia.",
-    "Esto explica por que algunas personas parecen irresistibles.",
-    "Hay una razon por la que no puedes dejar de pensar en esa persona.",
-    "Este error esta arruinando tus relaciones.",
-    "Tu cerebro prefiere una mentira antes que esta verdad.",
-    "La gente inteligente tambien cae en esta trampa.",
-    "Puede que estes confundiendo amor con manipulacion.",
-    "Esto ocurre en casi todas las relaciones toxicas.",
-    "Hay una tecnica que usan para controlarte sin hablar.",
-    "Si siempre acabas decepcionado... escucha esto.",
-]
+# 100 hooks clasificados por categoria
+HOOKS_BY_CATEGORY = {
+    "relaciones": [
+        "Tu ex no te queria. Te necesitaba.",
+        "Esa persona te esta usando y sonrie.",
+        "Si te ignora a veces... ya te tiene.",
+        "Lo que llamas amor, el lo llama control.",
+        "Volvio cuando ya lo habias superado. No fue casualidad.",
+        "El problema no eres tu. Es lo que toleras.",
+        "Te quiere cuando le conviene. Eso tiene nombre.",
+        "Hay personas que solo aparecen cuando te necesitan.",
+        "La red flag mas grande no grita. Susurra.",
+        "Si sientes que caminas sobre cascara de huevo... es senal.",
+        "No te engano de golpe. Lo hizo poco a poco.",
+        "Ese silencio no fue accidental.",
+        "Te dejo en visto. No fue sin querer.",
+        "Si siempre eres tu quien da... ya sabes la respuesta.",
+        "Ese te quiero llego justo cuando ibas a irte.",
+    ],
+    "manipulacion": [
+        "Alguien te esta manipulando ahora mismo sin saberlo.",
+        "Los mejores manipuladores siempre parecen los mas amables.",
+        "Te hicieron sentir culpable de algo que no hiciste.",
+        "Si siempre acabas pidiendo perdon... algo falla.",
+        "Te dieron un cumplido justo antes de pedirte algo.",
+        "Hacerte sentir especial es la primera tecnica.",
+        "La culpa que sientes... no es tuya.",
+        "Alguien esta usando tu empatia en tu contra.",
+        "Cuando dices no, esa persona se convierte en victima.",
+        "Usan tus secretos como municion.",
+        "El manipulador nunca empieza con una mentira grande.",
+        "Antes de pedirte algo, siempre te hacen un favor.",
+        "Te comparan con otros para que compitas.",
+        "Siempre hay una excusa. Siempre.",
+        "Si te hacen dudar de tu memoria, huye.",
+    ],
+    "narcisistas": [
+        "Los narcisistas no cambian. Mejoran su actuacion.",
+        "Te eligieron porque eres facil de moldear.",
+        "El narcisista no te quiere. Te usa como espejo.",
+        "Cuando los dejas, vuelven. No por amor. Por ego.",
+        "El love bombing no es amor. Es anzuelo.",
+        "Un narcisista te hace sentir elegido. Luego prescindible.",
+        "Te destruyeron la autoestima para que los necesitaras mas.",
+        "Te hicieron creer que sin ellos no eres nada.",
+        "Sienten envidia de ti pero nunca lo admitiran.",
+        "Si alguien necesita que siempre le des la razon... es senal.",
+    ],
+    "autoestima": [
+        "Tu peor critico vive dentro de tu cabeza.",
+        "Compararte en redes te esta costando tu paz.",
+        "Cada vez que buscas su aprobacion, pierdes la tuya.",
+        "La inseguridad no aparece sola. Alguien te la enseno.",
+        "Tu cerebro recuerda el insulto y olvida el cumplido.",
+        "Pides perdon por existir. Y eso es un problema.",
+        "Si necesitas likes para sentirte bien... es mas grave.",
+        "Sigues pensando en lo que dijo alguien hace anos.",
+        "Tu miedo al rechazo esta tomando decisiones por ti.",
+        "No te falta confianza. Te sobran criticas ajenas interiorizadas.",
+    ],
+    "cerebro": [
+        "Tu cerebro te miente varias veces al dia.",
+        "Hay un truco que usan para hacerte adicto a ellos.",
+        "Tu mente reescribe los recuerdos para proteger tu ego.",
+        "El cerebro trata el rechazo igual que el dolor fisico.",
+        "Tu cerebro crea patrones donde no existen.",
+        "Piensas que decides. Tu cerebro ya decidio.",
+        "Por que no puedes olvidar ese momento vergonzoso.",
+        "Tu mente busca lo que temes. Y eso lo empeora.",
+        "Hay personas que activan tu dopamina a proposito.",
+        "Eso que llamas intuicion... a veces es sesgo.",
+    ],
+    "ansiedad": [
+        "Eso que sientes en el pecho tiene nombre.",
+        "Analizas tanto que ya no puedes actuar.",
+        "Tu mente inventa conversaciones que nunca ocurriran.",
+        "Preparas respuestas para conversaciones que aun no han pasado.",
+        "Si piensas demasiado por la noche... esto lo explica.",
+        "Overpensar no es inteligencia. Es miedo disfrazado.",
+        "Tu cuerpo avisa antes que tu mente.",
+        "La verguenza de ayer sigue viva en tu cabeza hoy.",
+        "El peor escenario que imaginas casi nunca pasa.",
+        "La ansiedad no es debilidad. Es un sistema en alerta.",
+    ],
+    "dopamina": [
+        "Tu cerebro esta atrapado en un casino invisible.",
+        "Cada notificacion activa lo mismo que una droga.",
+        "Por que vuelves a mirar el perfil de alguien que te hace dano.",
+        "El scroll infinito fue disenado para enganar a tu cerebro.",
+        "Esperar su mensaje activa exactamente lo mismo que apostar.",
+    ],
+    "redes": [
+        "Llevas tres horas mirando vidas que no son reales.",
+        "Silenciaste sus historias pero sigues mirando de incognito.",
+        "Compararte con alguien en redes es compararte con su actuacion.",
+        "Por que sientes vacio despues de dos horas de scroll.",
+        "Esa foto tuya perfecta esconde algo que no dijiste.",
+    ],
+    "ghosting": [
+        "No desaparecio sin razon. Calculo el momento.",
+        "El ghosting no es cobardía. Es un mensaje sin palabras.",
+        "Enviaste el ultimo mensaje. Y ahi sigue.",
+        "No te merecio una explicacion porque te necesitaba disponible.",
+        "El ghosting duele mas porque tu cerebro no puede cerrar el bucle.",
+    ],
+    "lenguaje_corporal": [
+        "Su boca dijo que si. Su cuerpo dijo otra cosa.",
+        "Hay un gesto que delata a alguien que te miente.",
+        "Cuando alguien te copia los gestos... no es coincidencia.",
+        "Sus pies te dicen lo que sus palabras ocultan.",
+        "El contacto visual que te sostiene tres segundos de mas.",
+    ],
+}
+
+TOPIC_TO_CATEGORY = {
+    "ghosting": "ghosting",
+    "narcisist": "narcisistas",
+    "redes": "redes",
+    "dopamina": "dopamina",
+    "manipulac": "manipulacion",
+    "autoestima": "autoestima",
+    "ansiedad": "ansiedad",
+    "cerebro": "cerebro",
+    "lenguaje": "lenguaje_corporal",
+    "relacion": "relaciones",
+    "ex ": "relaciones",
+    "amor": "relaciones",
+    "crush": "relaciones",
+    "celos": "relaciones",
+    "toxico": "relaciones",
+    "toxicas": "relaciones",
+    "scroll": "dopamina",
+    "movil": "dopamina",
+}
+
+def get_hook_for_topic(topic):
+    topic_lower = topic.lower()
+    for key, cat in TOPIC_TO_CATEGORY.items():
+        if key in topic_lower:
+            pool = HOOKS_BY_CATEGORY.get(cat, [])
+            if pool:
+                return random.choice(pool)
+    all_hooks = [h for hooks in HOOKS_BY_CATEGORY.values() for h in hooks]
+    return random.choice(all_hooks)
 
 # ═══════════════════════════════════════════════════════════
-#  GROQ — genera guion + prompts de imagen ricos
+#  GROQ — guion AGRT de 5 escenas para Short de 10-12s
 # ═══════════════════════════════════════════════════════════
 def generate_script():
     api_key = os.environ.get("GROQ_API_KEY", "")
@@ -227,76 +339,80 @@ def generate_script():
     topic = random.choice(available)
     recent.append(topic)
     history_file.write_text(json.dumps(recent[-30:]))
-    hook = random.choice(DOPAMINE_HOOKS)
+    hook = get_hook_for_topic(topic)
     log.info(f"Tema: {topic}")
     log.info(f"Hook: {hook}")
 
-    # El prompt esta DENTRO de la funcion (bug corregido)
     prompt = (
-        "Eres el mejor guionista del mundo para YouTube Shorts sobre psicologia, manipulacion, "
-        "comportamiento humano y relaciones. "
-        "Tu objetivo NO es informar: tu objetivo es conseguir la maxima retencion posible. "
-        "Cada frase debe hacer que el espectador NECESITE escuchar la siguiente. "
-        "Tu publico son jovenes de 16 a 24 anos. Habla como un amigo, no como un profesor.\n\n"
+        "Eres el mejor creador de Shorts de psicologia del mundo.\n"
+        "Escribes para jovenes de 16 a 24 anos.\n"
+        "Tu unico objetivo es que el video se vea completo y se repita en bucle.\n\n"
         f"TEMA: {topic}\n"
-        f"LA PRIMERA ESCENA DEBE EMPEZAR EXACTAMENTE CON: '{hook}'\n\n"
-        "ESTRUCTURA OBLIGATORIA:\n"
-        "- ESCENA 1 (GANCHO): empieza con el hook, luego afirmacion sorprendente\n"
-        "- ESCENA 2 (EL PORQUE): que ocurre psicologicamente, muy simple\n"
-        "- ESCENA 3 (IDENTIFICACION): situacion cotidiana que el espectador haya vivido\n"
-        "- ESCENA 4 (REVELACION): la verdad que la mayoria desconoce, como un secreto\n"
-        "- ESCENA 5 (CONSECUENCIAS): como afecta a su vida ahora mismo\n"
-        "- ESCENA 6 (CAMBIO): reflexion que cambia su forma de pensar\n"
-        "- ESCENA 7 (FINAL): pregunta muy potente que invite a comentar\n\n"
-        "REGLAS DEL GUION:\n"
-        "- TODO en espanol\n"
-        "- Usa siempre 'tu' y 'tu'\n"
-        "- Cada escena: entre 6 y 12 palabras\n"
-        "- Frases cortas y faciles de entender\n"
-        "- Sin lenguaje academico\n"
-        "- Cada frase debe dejar una pregunta sin responder\n"
-        "- Tono misterioso, intenso y emocional\n"
-        "- Usa '...' para pausas dramaticas\n"
-        "- No uses emojis\n"
-        "- No pongas introducciones ni despedidas\n\n"
-        "REGLAS DE LAS IMAGENES (MUY IMPORTANTE):\n"
-        "Los prompts de imagen SIEMPRE en ingles.\n"
-        "Para cada escena genera un prompt cinematografico de 40-60 palabras.\n"
-        "El protagonista SIEMPRE debe ser un joven de 16 a 24 anos con ropa moderna "
-        "(hoodie, streetwear, ropa casual actual).\n"
-        "Los escenarios deben ser actuales: habitacion con luz de pantalla, ciudad nocturna, "
-        "transporte publico, instituto, universidad, cafeteria, parque urbano.\n"
-        "Cada imagen debe incluir UN simbolo psicologico visual poderoso relacionado con la escena.\n"
-        "Estilo visual: cinematografico, como una escena de serie de Netflix o HBO.\n"
-        "NO uses el mismo tipo de composicion dos veces seguidas.\n"
-        "Alterna entre: primer plano de cara, plano medio, plano general, plano picado.\n"
-        "Iluminacion: dramatica, volumetrica, con luces de neon, pantallas, farolas.\n"
-        "Siempre incluye: ultra detailed, masterpiece, 8k, cinematic lighting, no text, no watermark.\n\n"
-        "EJEMPLOS DE PROMPTS DE CALIDAD:\n"
-        "- 'Young man 20 years old in hoodie surrounded by floating phone notifications "
-        "one red message glowing bright, cinematic lighting, emotional, ultra detailed, 8k, no text'\n"
-        "- 'Teenage girl standing alone in crowded high school hallway people wearing identical "
-        "white masks one mask cracking, Netflix thriller aesthetic, dramatic lighting, masterpiece'\n"
-        "- 'Young person lying in dark bedroom face lit only by phone screen giant invisible "
-        "hands pulling strings attached to their head, cinematic, ultra detailed, 8k'\n\n"
-        "Devuelve UNICAMENTE JSON valido con este formato exacto:\n"
+        f"LA FRASE 1 DEBE SER EXACTAMENTE: '{hook}'\n\n"
+        "FORMATO OBLIGATORIO: 5 frases, estructura AGRT.\n\n"
+        "FRASE 1 - ALARMA: usa el hook exacto de arriba.\n"
+        "Crea incomodidad inmediata. El espectador debe parar el scroll.\n\n"
+        "FRASE 2 - GAP (6-8 palabras):\n"
+        "Amplia el gancho pero NO lo expliques.\n"
+        "El espectador debe pensar: como? por que? a mi?\n\n"
+        "FRASE 3 - REVELACION (7-9 palabras):\n"
+        "La verdad inesperada. Contradice lo que el espectador creia.\n"
+        "Empieza con: Tu cerebro... / Lo llaman... / La razon es... / Eso se llama...\n"
+        "Usa '...' en esta frase para la pausa dramatica.\n\n"
+        "FRASE 4 - CONSECUENCIA (6-8 palabras):\n"
+        "Conecta la revelacion con la vida del espectador AHORA MISMO.\n"
+        "Usa: cada vez que / hoy mismo / en este momento / sin que lo notes.\n\n"
+        "FRASE 5 - TRAMPA (5-8 palabras):\n"
+        "Elige UNA opcion:\n"
+        "A) Pregunta directa y personal que solo se responde en comentarios.\n"
+        "B) Afirmacion que genera disonancia y obliga a rebobinar.\n"
+        "NUNCA termines con dale like ni sigueme.\n\n"
+        "REGLAS ABSOLUTAS:\n"
+        "- TODO en espanol, tutear siempre\n"
+        "- Cada frase: 5-9 palabras MAXIMO\n"
+        "- Total del guion: 30-42 palabras\n"
+        "- Cero palabras academicas\n"
+        "- Cero relleno: en realidad, de hecho, basicamente\n"
+        "- Una sola idea por frase\n"
+        "- Usa '...' solo en la frase 3, no en las demas\n\n"
+        "REGLAS DE IMAGENES (prompts en ingles, 40-60 palabras):\n"
+        "Composicion por frase (no repetir el mismo tipo):\n"
+        "  Frase 1: Extreme close-up face\n"
+        "  Frase 2: Medium shot torso up\n"
+        "  Frase 3: Dutch angle medium shot\n"
+        "  Frase 4: Over-the-shoulder or POV\n"
+        "  Frase 5: Direct eye contact looking at camera\n"
+        "Protagonista: joven 18-22 anos, streetwear, hoodie oversized.\n"
+        "Escenario: bedroom con luz de pantalla, calle nocturna neon, metro vacio, instituto.\n"
+        "Un simbolo psicologico distinto por imagen (no repetir):\n"
+        "  manos invisibles tirando hilos, espejo con reflejo diferente,\n"
+        "  notificaciones flotando, sombra que no coincide, cuerda en el pecho,\n"
+        "  mascara cayendo, ojos multiples en el fondo, reloj derritiendose.\n"
+        "Luz: azul frio=soledad, rojo=peligro, morado=poder, dorado=revelacion.\n"
+        "Siempre incluir: cinematic, 8k, ultra detailed, masterpiece, no text, no watermark, 9:16 vertical.\n\n"
+        "Devuelve UNICAMENTE JSON valido:\n"
         "{\n"
-        "  \"title\": \"...\",\n"
-        "  \"description\": \"...\",\n"
-        "  \"tags\": [\"psicologia\",\"psicologia oscura\",\"mente\",\"cerebro\","
-        "\"manipulacion\",\"relaciones\",\"curiosidades\",\"shorts\",\"viral\",\"jovenes\"],\n"
+        "  \"title\": \"titulo llamativo maximo 55 caracteres\",\n"
+        "  \"description\": \"una frase de 15-20 palabras\",\n"
+        "  \"tags\": [\"psicologia\",\"mente\",\"cerebro\",\"manipulacion\",\"relaciones\",\"autoestima\",\"shorts\",\"viral\",\"jovenes\",\"comportamiento\"],\n"
         "  \"scenes\": [\n"
-        "    {\"text\": \"...\", \"prompt\": \"...\"},\n"
-        "    ... (exactamente 7 escenas)\n"
+        "    {\"text\": \"frase 1\", \"prompt\": \"imagen 1 en ingles\"},\n"
+        "    {\"text\": \"frase 2\", \"prompt\": \"imagen 2 en ingles\"},\n"
+        "    {\"text\": \"frase 3\", \"prompt\": \"imagen 3 en ingles\"},\n"
+        "    {\"text\": \"frase 4\", \"prompt\": \"imagen 4 en ingles\"},\n"
+        "    {\"text\": \"frase 5\", \"prompt\": \"imagen 5 en ingles\"}\n"
         "  ]\n"
         "}\n\n"
-        "No escribas explicaciones. No uses markdown. No pongas ```. Solo el JSON."
+        "No escribas nada mas. Solo JSON."
     )
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {"model": "llama-3.3-70b-versatile",
-               "messages": [{"role": "user", "content": prompt}],
-               "temperature": 1.0, "max_tokens": 2500}
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 1.0,
+        "max_tokens": 2000,
+    }
 
     for attempt in range(SCRIPT_RETRIES):
         try:
@@ -314,12 +430,19 @@ def generate_script():
             if start == -1 or end <= start:
                 log.warning("JSON no encontrado, reintentando..."); continue
             script = json.loads(raw[start:end])
-            if "scenes" not in script or len(script["scenes"]) < 5:
+            if "scenes" not in script or len(script["scenes"]) < 4:
                 log.warning(f"Solo {len(script.get('scenes',[]))} escenas, reintentando..."); continue
+            # Asegurar exactamente NUM_SCENES escenas
             while len(script["scenes"]) < NUM_SCENES:
                 script["scenes"].append(random.choice(script["scenes"]).copy())
             script["scenes"] = script["scenes"][:NUM_SCENES]
             script["_topic"] = topic
+            # Recortar frases que excedan 10 palabras
+            for i, scene in enumerate(script["scenes"]):
+                words = scene["text"].split()
+                if len(words) > 10:
+                    scene["text"] = " ".join(words[:9])
+                    log.warning(f"Frase {i+1} recortada a 9 palabras")
             log.success(f"Script OK: {script['title']} ({len(script['scenes'])} escenas)")
             return script
         except json.JSONDecodeError as e:
@@ -333,87 +456,70 @@ def generate_script():
 def fallback_script():
     options = [
         {
-            "title": "La verdad que tu cerebro te oculta",
-            "description": "El mecanismo psicologico que influye en tus decisiones sin que lo sepas.",
-            "tags": ["psicologia","psicologia oscura","mente","cerebro","manipulacion","relaciones","curiosidades","shorts","viral","jovenes"],
+            "title": "Tu cerebro te esta mintiendo ahora",
+            "description": "El mecanismo psicologico que toma decisiones por ti sin que lo sepas.",
+            "tags": ["psicologia","mente","cerebro","manipulacion","relaciones","autoestima","shorts","viral","jovenes","comportamiento"],
             "scenes": [
-                {"text": "Tu cerebro te esta enganando ahora mismo.",
-                 "prompt": "Young man 19 years old in dark hoodie sitting alone in bedroom face lit only by blue phone screen, giant shadowy hands controlling invisible strings attached to his head, cinematic psychological thriller, ultra detailed, 8k, no text, no watermark"},
-                {"text": "Filtra la realidad... para proteger tu ego.",
-                 "prompt": "Teenage girl looking through a cracked phone screen at distorted version of reality outside, one eye seeing truth one eye seeing lies, cinematic lighting, Netflix aesthetic, ultra detailed, 8k, no text"},
-                {"text": "Recuerda la ultima vez que te equivocaste... y no lo quisiste admitir.",
-                 "prompt": "Young person 20 years old standing in high school hallway while floating memory bubble shows embarrassing moment only they can see, dramatic cinematic lighting, emotional, masterpiece, 8k, no text"},
-                {"text": "Tu cerebro reescribe ese recuerdo... para hacerte el heroe.",
-                 "prompt": "Film reel being secretly edited by shadow hands in dark cinema, each frame showing different version of same memory, psychological thriller aesthetic, dramatic lighting, ultra detailed, 8k, no text"},
-                {"text": "Eso afecta a tus relaciones sin que lo notes.",
-                 "prompt": "Young couple 18-22 years old in park at night transparent wall of distorted perception growing between them while they smile unaware, cinematic, dramatic neon lighting, masterpiece, 8k, no text"},
-                {"text": "Todo cambia cuando cuestionas tu propia historia.",
-                 "prompt": "Young woman 21 years old looking at cracked mirror in dark bathroom true clear reflection emerging beneath the distortion, dramatic single light, emotional, cinematic, ultra detailed, 8k, no text"},
-                {"text": "Cuantas veces tu mente te ha mentido... solo hoy?",
-                 "prompt": "Young person standing at crossroads in dark urban street shadow self facing them in confrontation golden dawn breaking behind them, epic cinematic, emotional, masterpiece, 8k, no text"},
+                {"text": "Tu cerebro te miente varias veces al dia.",
+                 "prompt": "Extreme close-up young man 20yo face, eyes wide with sudden realization, invisible puppet strings glowing red attached to temples, dark bedroom lit only by cold blue phone screen, psychological thriller, cinematic, 8k, ultra detailed, masterpiece, no text, no watermark, 9:16 vertical"},
+                {"text": "Y lo peor es que no puedes detectarlo.",
+                 "prompt": "Medium shot young woman 19yo sitting on bed, hands covering face partially, distorted reflection in phone screen showing different expression, neon blue bedroom light, emotional, cinematic, ultra detailed, masterpiece, no text, 9:16 vertical"},
+                {"text": "Tu mente reescribe los recuerdos... para protegerte.",
+                 "prompt": "Dutch angle young person 21yo in dark corridor, film reel unspooling from their head with different memory frames visible, moody purple light, psychological surrealism, cinematic, 8k, masterpiece, no text, 9:16 vertical"},
+                {"text": "Por eso siempre te ves como el heroe.",
+                 "prompt": "Over-the-shoulder shot young man 20yo looking at group of friends, his shadow on wall shows him larger and central while real shadow is small, urban park night, neon street light, cinematic, ultra detailed, no text, 9:16 vertical"},
+                {"text": "Cuantas veces te ha mentido solo hoy?",
+                 "prompt": "Young woman 21yo direct intense eye contact with camera, calm knowing expression, slight half-smile, dark urban rooftop night, city lights blurred behind, dramatic single spotlight, masterpiece, 8k, cinematic, no text, 9:16 vertical"},
             ],
         },
         {
-            "title": "Por que no puedes dejar de pensar en esa persona",
-            "description": "La trampa psicologica que hace que alguien ocupe tu mente constantemente.",
-            "tags": ["psicologia","psicologia oscura","mente","cerebro","amor","obsesion","relaciones","shorts","viral","jovenes"],
+            "title": "El ghosting no es lo que crees",
+            "description": "La verdad psicologica detras de desaparecer sin dar explicaciones.",
+            "tags": ["psicologia","ghosting","relaciones","mente","cerebro","manipulacion","shorts","viral","jovenes","comportamiento"],
             "scenes": [
-                {"text": "Hay una razon por la que no puedes olvidarle.",
-                 "prompt": "Young person 19 years old lying in dark bedroom ceiling covered in floating glowing memories of one specific person, emotional, cinematic, dramatic blue lighting, ultra detailed, 8k, no text"},
-                {"text": "Tu cerebro lo etiqueta como... una recompensa no completada.",
-                 "prompt": "Brain cross-section with one glowing pathway obsessively activated surrounded by darkness, psychological scientific thriller aesthetic, dramatic lighting, masterpiece, 8k, no text"},
-                {"text": "Recuerdas cuando te dejaba en visto... y lo comprobabas cada minuto.",
-                 "prompt": "Young woman 20 years old in bed at 2am checking phone repeatedly message says delivered not read dramatic phone glow on face anxious expression, cinematic, ultra detailed, 8k, no text"},
-                {"text": "Cuanto mas te ignora... mas lo deseas.",
-                 "prompt": "Young man 21 years old reaching toward fading silhouette that keeps moving away in dark park neon lights reflecting in puddles below, psychological thriller, cinematic, masterpiece, 8k, no text"},
-                {"text": "Eso te roba tiempo... energia... y paz mental.",
-                 "prompt": "Hourglass draining not sand but hours and memories young person watching exhausted unable to stop it, symbolic psychological art, dramatic lighting, ultra detailed, 8k, no text"},
-                {"text": "Cuando entiendes el truco... el hechizo se rompe.",
-                 "prompt": "Young person 20 years old breaking invisible mental chains in dark urban setting light breaking through cracks dramatic liberation, cinematic, emotional, masterpiece, 8k, no text"},
-                {"text": "En quien estas pensando ahora mismo mientras escuchas esto?",
-                 "prompt": "Young person alone on rooftop at night city lights below looking directly at viewer calm but knowing expression cinematic portrait, ultra detailed, 8k, dramatic lighting, no text"},
+                {"text": "No desaparecio sin razon. Calculo el momento.",
+                 "prompt": "Extreme close-up young woman 20yo eyes staring at phone screen showing last message sent days ago, cold blue light on face, clock hands visible faintly superimposed, cinematic, 8k, ultra detailed, masterpiece, no text, no watermark, 9:16 vertical"},
+                {"text": "Y eso es mucho peor que el abandono.",
+                 "prompt": "Medium shot young man 19yo at subway late night, empty car, ghost silhouette of person sitting next to him fading into air, purple moody light, psychological thriller, cinematic, masterpiece, no text, 9:16 vertical"},
+                {"text": "El ghosting activa el mismo dolor... que una perdida real.",
+                 "prompt": "Dutch angle young person 21yo clutching chest, visible heartbeat pulse radiating outward like sonar waves, dark apartment single overhead lamp, psychological symbolism, 8k, cinematic, ultra detailed, no text, 9:16 vertical"},
+                {"text": "Tu cerebro busca el cierre que no llego.",
+                 "prompt": "POV shot hands holding phone with unanswered conversation thread, cold screen light illuminating hands dramatically, urban cafe window rain outside, cinematic, ultra detailed, masterpiece, no text, 9:16 vertical"},
+                {"text": "Cuantos dias llevas esperando esa respuesta?",
+                 "prompt": "Young woman 20yo direct camera stare, calm but eyes holding back emotion, rooftop night city lights below, warm golden backlight contrasting cold blue phone glow, cinematic portrait, 8k, masterpiece, no text, 9:16 vertical"},
             ],
         },
         {
-            "title": "Lo que tu crush no te dice pero su cuerpo si",
-            "description": "Senales del lenguaje corporal que revelan lo que alguien realmente siente.",
-            "tags": ["psicologia","lenguaje corporal","relaciones","amor","shorts","viral","jovenes","crush","signos","mente"],
+            "title": "Alguien te controla sin que lo notes",
+            "description": "Las tecnicas de manipulacion silenciosa que se usan en relaciones cotidianas.",
+            "tags": ["psicologia","manipulacion","relaciones","mente","cerebro","autoestima","shorts","viral","jovenes","comportamiento"],
             "scenes": [
-                {"text": "Si alguien hace esto contigo... no es casualidad.",
-                 "prompt": "Two young people 18-20 years old in university cafeteria one subtly mirroring the other posture and gestures without realizing, cinematic overhead shot, dramatic warm lighting, ultra detailed, 8k, no text"},
-                {"text": "El cuerpo revela lo que la boca nunca dira.",
-                 "prompt": "Close up of young woman 19 years old face pupils dilated talking to someone off camera unconscious smile forming, psychological observation, cinematic macro photography aesthetic, masterpiece, 8k, no text"},
-                {"text": "Recuerdas cuando alguien te tocaba el brazo sin razon.",
-                 "prompt": "Young couple 20 years old in school hallway casual arm touch that lingers both pretending it means nothing dramatic lighting from window, cinematic, emotional, ultra detailed, 8k, no text"},
-                {"text": "Ese gesto no fue accidental... fue una senal.",
-                 "prompt": "Slow motion visual of hand touch with glowing energy transfer between two young people symbolic psychological moment, dramatic neon lighting, artistic cinematic, masterpiece, 8k, no text"},
-                {"text": "Ignorar esas senales te ha costado oportunidades reales.",
-                 "prompt": "Young man 21 years old watching chance disappear through window of bus while person he liked walks away unaware dramatic urban rain scene, cinematic, emotional, ultra detailed, 8k, no text"},
-                {"text": "Cuando sabes leer el cuerpo... nadie puede mentirte.",
-                 "prompt": "Young person 20 years old in crowded party seeing through everyones social masks seeing their true emotions as glowing auras, psychological surrealism, cinematic, masterpiece, 8k, no text"},
-                {"text": "Que gestos ves cuando alguien te gusta de verdad?",
-                 "prompt": "Young person looking directly at camera with slight knowing smile in dark urban street neon lights reflecting off wet pavement, cinematic portrait, emotional, ultra detailed, 8k, no text"},
+                {"text": "Alguien te esta manipulando ahora mismo sin saberlo.",
+                 "prompt": "Extreme close-up young man 20yo face, micro-expression of unease mixed with affection, invisible hand pressing gently on his chest from outside frame, dark bedroom warm amber light turning cold blue, cinematic, 8k, masterpiece, no text, no watermark, 9:16 vertical"},
+                {"text": "Y probablemente lo llamas carino.",
+                 "prompt": "Medium shot young couple 19-21yo, she smiling warmly at him, his shadow on wall behind forms controlling silhouette with strings, warm apartment light with cold edge, psychological thriller, cinematic, ultra detailed, no text, 9:16 vertical"},
+                {"text": "Tu cerebro no distingue amor... de dependencia.",
+                 "prompt": "Dutch angle young woman 20yo sitting alone at cafe table, brain cross-section glowing faintly visible through skull with two pathways labeled differently, purple neon light from window, surrealism, cinematic, 8k, no text, 9:16 vertical"},
+                {"text": "Por eso vuelves aunque te haga dano.",
+                 "prompt": "Over-the-shoulder young man 21yo walking toward same apartment door again, ghost version of himself walking away reflected in puddle below, neon street night rain, cinematic, ultra detailed, masterpiece, no text, 9:16 vertical"},
+                {"text": "Cuantas veces has vuelto ya?",
+                 "prompt": "Young woman 21yo direct confrontational eye contact with camera, quiet anger in calm face, dark minimal background, single dramatic overhead light, intense cinematic portrait, 8k, masterpiece, no text, 9:16 vertical"},
             ],
         },
     ]
     return random.choice(options)
 
 # ═══════════════════════════════════════════════════════════
-#  IMAGE GENERATION — estilos cinematograficos para jovenes
+#  IMAGE GENERATION
 # ═══════════════════════════════════════════════════════════
-
-# Estilos visuales que funcionan para publico 16-24
 IMAGE_STYLES = [
     "cinematic digital art, ultra detailed, masterpiece, dramatic lighting, emotional, 8k",
     "realistic cinematic illustration, psychological thriller, Netflix movie poster style, ultra detailed",
-    "modern anime MAPPA style, dramatic cinematic lighting, ultra detailed, emotional, masterpiece",
-    "Arcane style digital painting, vibrant dramatic lighting, cinematic, masterpiece, ultra detailed",
-    "cyberpunk psychological atmosphere, neon lights, cinematic, ultra detailed, dramatic shadows",
-    "dark surrealism, symbolic psychology, dreamlike, emotional, cinematic lighting, masterpiece",
-    "high-end concept art, realistic faces, dramatic shadows, cinematic composition, masterpiece, 8k",
-    "Netflix psychological thriller scene, ultra detailed, cinematic, dramatic lighting, masterpiece",
-    "Spider-Verse inspired digital illustration, vibrant dramatic lighting, cinematic composition",
     "photorealistic cinematic portrait, psychological tension, dramatic lighting, 8k, masterpiece",
+    "Netflix psychological thriller scene, ultra detailed, cinematic, dramatic lighting, masterpiece",
+    "high-end concept art, realistic faces, dramatic shadows, cinematic composition, masterpiece, 8k",
+    "dark surrealism, symbolic psychology, dreamlike, emotional, cinematic lighting, masterpiece",
+    "cyberpunk psychological atmosphere, neon lights, cinematic, ultra detailed, dramatic shadows",
 ]
 
 HF_MODELS = ["stabilityai/stable-diffusion-xl-base-1.0", "cagliostrolab/animagine-xl-3.1"]
@@ -438,13 +544,11 @@ def generate_image(prompt, index):
             import shutil; out = f"img_{index}.jpg"
             shutil.copy(str(cache_path), out); log.info(f"Imagen {index+1} desde cache"); return out
 
-    # El prompt ya viene enriquecido desde Groq
-    # Solo anadimos el estilo visual por encima
     style = random.choice(IMAGE_STYLES)
     full_prompt = (
         f"{prompt}, {style}, "
-        "young protagonist 16-24 years old modern clothing streetwear hoodie, "
-        "contemporary urban setting, psychological symbolism, "
+        "young protagonist 18-22 years old modern streetwear hoodie oversized, "
+        "contemporary urban setting, strong psychological symbolism, "
         "no watermark, no text, no signature, vertical portrait composition 9:16"
     )
     seed = int(time.time()) * (index+1) + random.randint(10000, 99999)
@@ -550,8 +654,16 @@ def get_fonts():
     d = ImageFont.load_default(); return d,d
 
 # ═══════════════════════════════════════════════════════════
-#  TEXT RENDERER — subtitulos estilo TikTok/CapCut
+#  TEXT RENDERER
+#  Highlight en palabra 2-3 segun la escena (no siempre la ultima)
 # ═══════════════════════════════════════════════════════════
+def get_emphasis_word_index(scene_idx, total_words):
+    if scene_idx == 0 and total_words >= 3:
+        return 2    # tercera palabra — la mas impactante del hook
+    if scene_idx == 2 and total_words >= 4:
+        return 3    # cuarta palabra — el dato clave de la revelacion
+    return total_words - 1  # ultima para el resto
+
 def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total_scenes):
     img = Image.fromarray(base_arr.astype(np.uint8)).convert("RGBA")
     w,h = img.size
@@ -574,26 +686,39 @@ def render_text_frame(base_arr, text, word_progress, frame_idx, scene_num, total
     draw.rectangle([(50,bar_y),(w-50,bar_y+7)], fill=accent)
 
     words = text.split(); shown = words[:word_progress]
+    total_words = len(words)
+    emphasis_idx = get_emphasis_word_index(scene_num, total_words)
     lines = textwrap.wrap(" ".join(shown), width=14)
-    line_h = 88; text_y = bar_y + 26; last_line = len(lines)-1
+    line_h = 88; text_y = bar_y + 26
 
+    global_word_idx = 0
     for li, line in enumerate(lines):
         line_words = line.split()
-        total_w_px = sum(draw.textbbox((0,0), ww+" ", font=font_main)[2]-draw.textbbox((0,0), ww+" ", font=font_main)[0] for ww in line_words)
+        total_w_px = sum(
+            draw.textbbox((0,0), ww+" ", font=font_main)[2] -
+            draw.textbbox((0,0), ww+" ", font=font_main)[0]
+            for ww in line_words
+        )
         x = (w-total_w_px)//2; y = text_y + li*line_h
         for wi, ww in enumerate(line_words):
             bb = draw.textbbox((0,0), ww+" ", font=font_main)
             ww_ = ww+" "; ww_w = bb[2]-bb[0]
-            is_last = (li == last_line and wi == len(line_words)-1 and word_progress <= len(words))
-            if is_last:
+            is_emphasis = (global_word_idx == emphasis_idx and word_progress > emphasis_idx)
+            if is_emphasis:
                 pad = 6
-                draw.rounded_rectangle([x-pad,y-pad,x+ww_w-bb[0]+pad,y+line_h-12+pad], radius=8, fill=highlight)
-                for ox,oy in [(3,3),(2,2)]: draw.text((x+ox,y+oy), ww_, font=font_main, fill=(0,0,0,180))
+                draw.rounded_rectangle(
+                    [x-pad, y-pad, x+ww_w-bb[0]+pad, y+line_h-12+pad],
+                    radius=8, fill=highlight
+                )
+                for ox,oy in [(3,3),(2,2)]:
+                    draw.text((x+ox,y+oy), ww_, font=font_main, fill=(0,0,0,180))
                 draw.text((x,y), ww_, font=font_main, fill=(255,255,255,255))
             else:
-                for ox,oy in [(5,5),(3,3),(1,1)]: draw.text((x+ox,y+oy), ww_, font=font_main, fill=(0,0,0,180))
+                for ox,oy in [(5,5),(3,3),(1,1)]:
+                    draw.text((x+ox,y+oy), ww_, font=font_main, fill=(0,0,0,180))
                 draw.text((x,y), ww_, font=font_main, fill=(255,255,255,255))
             x += ww_w
+            global_word_idx += 1
 
     draw.rectangle([(50,h-158),(w-50,h-151)], fill=accent[:3]+(200,))
     label = "PSICOLOGIA OSCURA"
@@ -623,64 +748,92 @@ def zoom_frame(base_img, t, duration):
     return base_img.crop((left,top,left+nw,top+nh)).resize((w,h), Image.LANCZOS)
 
 # ═══════════════════════════════════════════════════════════
-#  TTS ESPANOL
+#  TTS — velocidad y tono variables por escena
 # ═══════════════════════════════════════════════════════════
 def _ensure_signed(v):
     return v if v.startswith(("+","-")) else f"+{v}"
 
-VOICE_RATE = _ensure_signed(VOICE_RATE)
-VOICE_PITCH = _ensure_signed(VOICE_PITCH)
-VOICE_VOLUME = _ensure_signed(VOICE_VOLUME)
-
-async def _synth(text, path, voice=None, rate=None, pitch=None, volume=None):
-    tts = Communicate(text, voice=voice or VOICE, rate=rate or VOICE_RATE,
-                      pitch=pitch or VOICE_PITCH, volume=volume or VOICE_VOLUME)
+async def _synth(text, path, rate, pitch, volume):
+    tts = Communicate(
+        text, voice=VOICE,
+        rate=_ensure_signed(rate),
+        pitch=_ensure_signed(pitch),
+        volume=_ensure_signed(volume),
+    )
     await tts.save(path)
+
+def _prepend_silence(audio_path, silence_s=0.3):
+    """Añade silencio al inicio del audio (para la escena trampa final)."""
+    try:
+        import struct, wave as wv
+        sr = 44100; samples = int(sr * silence_s)
+        silence_data = struct.pack("<" + "h" * samples, *([0] * samples))
+        sil_path = audio_path + "_silence.wav"
+        with wv.open(sil_path, "w") as wf:
+            wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr)
+            wf.writeframes(silence_data)
+        out_path = audio_path + "_padded.mp3"
+        cmd = ["ffmpeg", "-y",
+               "-i", sil_path, "-i", audio_path,
+               "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1[aout]",
+               "-map", "[aout]", "-c:a", "libmp3lame", out_path]
+        result = subprocess.run(cmd, capture_output=True, timeout=20)
+        if result.returncode == 0:
+            import shutil; shutil.move(out_path, audio_path)
+        Path(sil_path).unlink(missing_ok=True)
+    except Exception as e:
+        log.warning(f"prepend_silence fallo: {e}")
 
 def _audio_duration_ok(path, text):
     try:
         clip = AudioFileClip(path); dur = clip.duration; clip.close()
-        return (dur >= max(MIN_AUDIO_S, len(text.split())/4.0)*0.5), dur
+        return (dur >= max(MIN_AUDIO_S, len(text.split())/5.0)*0.5), dur
     except: return False, 0
 
 def synth_one(text, index):
-    key = hashlib.md5(text.encode()).hexdigest()[:12]
+    config = VOICE_CONFIG_BY_SCENE.get(index, FALLBACK_VOICE)
+    add_silence = (index == NUM_SCENES - 1)  # pausa de 0.3s en escena trampa
+
+    key = hashlib.md5((text + str(index)).encode()).hexdigest()[:12]
     cache_path = str(CACHE_DIR / "audio" / f"{key}.mp3")
     out_path = f"audio_{index}.mp3"; min_bytes = 8000
+
     if Path(cache_path).exists() and Path(cache_path).stat().st_size > min_bytes:
         ok, dur = _audio_duration_ok(cache_path, text)
         if ok:
             import shutil; shutil.copy(cache_path, out_path)
             log.info(f"Audio {index+1} desde cache ({dur:.1f}s)"); return out_path
+
     for attempt in range(TTS_RETRIES):
         use_fallback = attempt >= 2
         try:
             if Path(out_path).exists(): os.remove(out_path)
-            if use_fallback:
-                v = FALLBACK_VOICE
-                asyncio.run(_synth(text, out_path, voice=v["voice"], rate=v["rate"], pitch=v["pitch"], volume=v["volume"]))
-            else:
-                asyncio.run(_synth(text, out_path))
+            v = FALLBACK_VOICE if use_fallback else config
+            asyncio.run(_synth(text, out_path, v["rate"], v["pitch"], v["volume"]))
             p = Path(out_path)
             if not p.exists() or p.stat().st_size < min_bytes:
                 log.warning(f"Audio {index+1} muy pequeno, reintento {attempt+1}..."); time.sleep(2+attempt); continue
             ok, dur = _audio_duration_ok(out_path, text)
             if ok:
+                if add_silence:
+                    _prepend_silence(out_path, 0.3)
                 import shutil; shutil.copy(out_path, cache_path)
-                log.success(f"Audio {index+1} OK ({p.stat().st_size//1024}KB, {dur:.1f}s)"); return out_path
+                log.success(f"Audio {index+1} OK | rate={v['rate']} pitch={v['pitch']} | {dur:.1f}s")
+                return out_path
             log.warning(f"Audio {index+1} muy corto ({dur:.1f}s), reintento {attempt+1}...")
         except Exception as e:
             log.warning(f"Audio {index+1} intento {attempt+1}: {e}")
         time.sleep(2+attempt)
-    log.error(f"Audio {index+1} fallo — silencio"); _make_silence(out_path, 3.0); return out_path
+
+    log.error(f"Audio {index+1} fallo — silencio"); _make_silence(out_path, 2.0); return out_path
 
 def synth_all_sequential(scenes):
     paths = {}
-    for i,scene in enumerate(scenes):
+    for i, scene in enumerate(scenes):
         paths[i] = synth_one(scene["text"], i); time.sleep(0.5)
     return paths
 
-def _make_silence(path, duration=3.0):
+def _make_silence(path, duration=2.0):
     import struct, wave as wv
     sr = 44100; samples = int(sr*duration)
     data = struct.pack("<"+"h"*samples, *([0]*samples))
@@ -733,7 +886,7 @@ def _lowpass_noise(length, sr, cutoff_hz=300, std=0.02):
     fft[freqs > cutoff_hz] = 0
     return np.fft.irfft(fft, n=length).astype(np.float32)
 
-def generate_music(duration=60, mood=None):
+def generate_music(duration=30, mood=None):
     mood = mood or _chosen_mood
     try:
         sr = 44100; t = np.linspace(0, duration, int(sr*duration), dtype=np.float32)
@@ -750,7 +903,7 @@ def generate_music(duration=60, mood=None):
         music += 0.03*np.sin(2*np.pi*shz*t)*np.sin(2*np.pi*random.uniform(0.18,0.28)*t)
         music += 0.09*np.sin(2*np.pi*25*t)*(0.4+0.6*np.sin(2*np.pi*0.04*t))
         music += _lowpass_noise(len(t), sr)*(0.4+0.6*np.sin(2*np.pi*0.05*t))
-        fade = int(sr*3); music[:fade] *= np.linspace(0,1,fade); music[-fade:] *= np.linspace(1,0,fade)
+        fade = int(sr*2); music[:fade] *= np.linspace(0,1,fade); music[-fade:] *= np.linspace(1,0,fade)
         music = music/(np.max(np.abs(music))+1e-9)*0.32
         wav = "bg_music.wav"
         with wave.open(wav,"w") as wf:
@@ -766,13 +919,16 @@ def get_background_music(duration, mood=None):
     return generate_music(duration=duration, mood=mood), "synthetic"
 
 # ═══════════════════════════════════════════════════════════
-#  BUILD SCENE
+#  BUILD SCENE — silencio visual +1.2s en escena final (loop)
 # ═══════════════════════════════════════════════════════════
 def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
     audio = AudioFileClip(audio_path)
-    duration = max(audio.duration+0.8, MIN_AUDIO_S+1)
-    total_frames = int(duration*FPS); words = text.split(); total_words = len(words)
-    reveal_frames = int(FPS*1.3)
+    # Escena trampa: +1.2s de imagen estática sin voz para favorecer el loop
+    extra_silence = 1.2 if scene_idx == total_scenes - 1 else 0.0
+    duration = max(audio.duration + 0.6 + extra_silence, MIN_AUDIO_S + 0.5)
+    total_frames = int(duration*FPS)
+    words = text.split(); total_words = len(words)
+    reveal_frames = int(FPS * 0.9)   # revelacion de palabras mas rapida en shorts cortos
     log.info(f"  Escena {scene_idx+1}: {total_frames}f / {duration:.1f}s / {total_words}p")
     frames = []
     for f in range(total_frames):
@@ -782,8 +938,9 @@ def build_scene(base_img, audio_path, text, scene_idx, total_scenes):
         if f < 5: frame = glitch_frame(frame, intensity=5)
         frames.append(frame.astype(np.uint8))
     def make_frame(t): return frames[min(int(t*FPS), len(frames)-1)]
-    clip = VideoClip(make_frame, duration=duration); clip = clip.set_audio(audio)
-    return clip.fadein(0.3).fadeout(0.3)
+    clip = VideoClip(make_frame, duration=duration)
+    clip = clip.set_audio(audio)
+    return clip.fadein(0.2).fadeout(0.2)
 
 # ═══════════════════════════════════════════════════════════
 #  CHECKLIST
@@ -798,7 +955,7 @@ def validate_video(path, title, description, tags):
         if not has_audio: errors.append("Sin audio")
     except Exception as e: errors.append(f"No se puede abrir: {e}")
     if not Path(path).exists(): errors.append("Archivo no encontrado")
-    elif Path(path).stat().st_size < 500_000: errors.append("Archivo muy pequeno")
+    elif Path(path).stat().st_size < 300_000: errors.append("Archivo muy pequeno")
     if len(title) > 60: errors.append(f"Titulo muy largo ({len(title)})")
     if not description: errors.append("Sin descripcion")
     if len(tags) < 5: errors.append("Pocos tags")
@@ -814,13 +971,13 @@ def build_video(scenes):
     total = len(scenes)
     log.info("Generando imagenes...")
     img_paths = {}
-    for i,scene in enumerate(scenes):
+    for i, scene in enumerate(scenes):
         img_paths[i] = generate_image(scene["prompt"], i); time.sleep(1.5)
     log.info("Generando audio...")
     audio_paths = synth_all_sequential(scenes)
     clips = []
-    for i,scene in enumerate(scenes):
-        log.info(f"Construyendo escena {i+1}/{total}: {scene['text'][:40]}...")
+    for i, scene in enumerate(scenes):
+        log.info(f"Construyendo escena {i+1}/{total}: {scene['text'][:50]}...")
         base_img = add_vignette(Image.open(img_paths[i]).convert("RGB"))
         clips.append(build_scene(base_img, audio_paths[i], scene["text"], i, total))
     final = concatenate_videoclips(clips, method="compose")
@@ -833,7 +990,7 @@ def build_video(scenes):
                           bitrate="12000k", preset="fast", threads=4,
                           ffmpeg_params=["-crf","18"], logger=None)
 
-    music_path, music_source = get_background_music(duration=int(final_duration)+8)
+    music_path, music_source = get_background_music(duration=int(final_duration)+5)
     output = "viral_short.mp4"
     if music_path and Path(music_path).exists():
         try:
@@ -842,7 +999,8 @@ def build_video(scenes):
                  "-of","default=noprint_wrappers=1:nokey=1", music_path],
                 capture_output=True, text=True, timeout=20)
             if float(probe.stdout.strip() or 0) < 1.0:
-                log.warning("Musica invalida, regenerando..."); music_path = generate_music(int(final_duration)+8); music_source = "synthetic"
+                log.warning("Musica invalida, regenerando...")
+                music_path = generate_music(int(final_duration)+5); music_source = "synthetic"
             music_volume = 0.35 if music_source == "freesound" else 0.45
             cmd = ["ffmpeg","-y","-i",voice_only,"-i",music_path,
                    "-filter_complex",
@@ -850,12 +1008,14 @@ def build_video(scenes):
                    f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]",
                    "-map","0:v","-map","[aout]","-c:v","copy","-c:a","aac","-b:a","192k","-shortest",output]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-            if result.returncode == 0 and Path(output).stat().st_size > 500_000:
+            if result.returncode == 0 and Path(output).stat().st_size > 300_000:
                 log.success(f"Musica mezclada OK ({music_source}, vol={music_volume})")
             else:
-                log.warning(f"ffmpeg mix fallo: {result.stderr[-300:]}"); import shutil; shutil.copy(voice_only, output)
+                log.warning(f"ffmpeg mix fallo: {result.stderr[-300:]}")
+                import shutil; shutil.copy(voice_only, output)
         except Exception as e:
-            log.warning(f"Error mezcla musica: {e}"); import shutil; shutil.copy(voice_only, output)
+            log.warning(f"Error mezcla musica: {e}")
+            import shutil; shutil.copy(voice_only, output)
     else:
         log.warning("Sin musica — solo voz"); import shutil; shutil.copy(voice_only, output)
     return output
@@ -902,11 +1062,12 @@ def log_video_metadata(video_id, script, duration):
     try:
         with open(csv_path,"a",newline="",encoding="utf-8") as f:
             w = csv.writer(f)
-            if is_new: w.writerow(["fecha","video_id","url","titulo","tema","voz","tema_visual","mood","duracion_s","escenas"])
+            if is_new:
+                w.writerow(["fecha","video_id","url","titulo","tema","tema_visual","mood","duracion_s","escenas"])
             w.writerow([time.strftime("%Y-%m-%d %H:%M"), video_id or "FALLO",
                         f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
                         script["title"], script.get("_topic",""),
-                        VOICE, THEME["name"], _chosen_mood, f"{duration:.1f}", len(script.get("scenes",[]))])
+                        THEME["name"], _chosen_mood, f"{duration:.1f}", len(script.get("scenes",[]))])
         log.success("Metadata guardada")
     except Exception as e: log.warning(f"Error metadata: {e}")
 
@@ -915,7 +1076,7 @@ def log_video_metadata(video_id, script, duration):
 # ═══════════════════════════════════════════════════════════
 if __name__ == "__main__":
     log.info("="*55)
-    log.info("  BOT YOUTUBE V6 — PSICOLOGIA EN ESPANOL")
+    log.info("  BOT YOUTUBE V7 — PSICOLOGIA SHORTS 10-12s")
     log.info("="*55)
 
     if not check_upload_guard():

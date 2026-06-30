@@ -26,6 +26,18 @@ SCRIPT_RETRIES     = 5
 UPLOAD_RETRIES     = 3
 TTS_RETRIES        = 4
 
+# ── VOCES DISPONIBLES (rotación para evitar "sonido clonado") ──────
+# Antes: una sola voz en los 208 vídeos = señal fuerte de contenido repetido.
+# Ahora: rotamos entre varias voces neuronales ES para que el canal no suene siempre igual.
+SPANISH_VOICES = [
+    "es-ES-AlvaroNeural",
+    "es-ES-XimenaNeural",
+    "es-MX-JorgeNeural",
+    "es-MX-DaliaNeural",
+    "es-AR-TomasNeural",
+]
+VOICE = random.choice(SPANISH_VOICES)
+
 # ── DURACIÓN OBJETIVO ──────────────────────────────────────
 TARGET_MIN_S       = 10.0
 TARGET_MAX_S       = 12.0
@@ -38,13 +50,13 @@ SCENE_MAX_DUR_S    = 2.3    # límite duro por escena
 # 0=ALARMA: grave | 1=GAP: rapida | 2=REVELACION: la mas lenta y grave
 # 3=CONSECUENCIA: normal  | 4=TRAMPA: ligeramente mas lenta
 VOICE_CONFIG_BY_SCENE = {
-    0: {"voice": "es-ES-AlvaroNeural", "rate": "+22%", "pitch": "-8Hz",  "volume": "+35%"},
-    1: {"voice": "es-ES-AlvaroNeural", "rate": "+30%", "pitch": "-5Hz",  "volume": "+30%"},
-    2: {"voice": "es-ES-AlvaroNeural", "rate": "+18%", "pitch": "-10Hz", "volume": "+32%"},
-    3: {"voice": "es-ES-AlvaroNeural", "rate": "+28%", "pitch": "-5Hz",  "volume": "+30%"},
-    4: {"voice": "es-ES-AlvaroNeural", "rate": "+20%", "pitch": "-6Hz",  "volume": "+33%"},
+    0: {"voice": VOICE, "rate": "+22%", "pitch": "-8Hz",  "volume": "+35%"},
+    1: {"voice": VOICE, "rate": "+30%", "pitch": "-5Hz",  "volume": "+30%"},
+    2: {"voice": VOICE, "rate": "+18%", "pitch": "-10Hz", "volume": "+32%"},
+    3: {"voice": VOICE, "rate": "+28%", "pitch": "-5Hz",  "volume": "+30%"},
+    4: {"voice": VOICE, "rate": "+20%", "pitch": "-6Hz",  "volume": "+33%"},
 }
-FALLBACK_VOICE = {"voice": "es-ES-AlvaroNeural", "rate": "+25%", "pitch": "-5Hz", "volume": "+30%"}
+FALLBACK_VOICE = {"voice": VOICE, "rate": "+25%", "pitch": "-5Hz", "volume": "+30%"}
 
 SUBTITLE_THEMES = [
     {"name": "blood_red",    "highlight": (220,15,15,230),   "accent": (220,15,15,255),  "label": (220,20,20,255)},
@@ -55,7 +67,6 @@ SUBTITLE_THEMES = [
 ]
 
 _chosen_theme    = random.choice(SUBTITLE_THEMES)
-VOICE            = "es-ES-AlvaroNeural"
 THEME            = _chosen_theme
 _ZOOM_INTENSITY  = random.uniform(0.02, 0.04)   # sutil para videos cortos
 
@@ -344,11 +355,28 @@ def generate_script():
         recent = json.loads(history_file.read_text()) if history_file.exists() else []
     except Exception:
         recent = []
-    available = [t for t in TOPICS if t not in recent[-10:]] or TOPICS
+    # Cooldown largo: con 60 temas en TOPICS, evitamos repetir hasta haber
+    # usado casi todo el catálogo. Antes el cooldown era de 10, lo que con
+    # alta frecuencia de publicación generaba el mismo tema cada pocas horas.
+    TOPIC_COOLDOWN = min(55, len(TOPICS) - 1)
+    available = [t for t in TOPICS if t not in recent[-TOPIC_COOLDOWN:]] or TOPICS
     topic = random.choice(available)
     recent.append(topic)
-    history_file.write_text(json.dumps(recent[-30:]))
+    history_file.write_text(json.dumps(recent[-100:]))
     log.info(f"Tema: {topic}")
+
+    # Variar protagonista por video: rompe la señal de "siempre el mismo
+    # personaje" que hacía a los 208 vídeos anteriores visualmente idénticos.
+    _genders = ["young man", "young woman"]
+    _ages = ["18 years old", "20 years old", "22 years old", "24 years old"]
+    _outfits = [
+        "streetwear hoodie oversized", "plain white t-shirt", "denim jacket",
+        "knit sweater", "leather jacket", "casual button-up shirt",
+    ]
+    _protagonist_desc = (
+        f"{random.choice(_genders)}, {random.choice(_ages)}, "
+        f"{random.choice(_outfits)}, expressive face"
+    )
 
     prompt = (
         "Eres un creador de contenido con 10 millones de seguidores en TikTok.\n"
@@ -487,7 +515,7 @@ def generate_script():
         "  Escena 3: Dutch angle medium shot — inestabilidad, momento de reconocimiento\n"
         "  Escena 4: Over-the-shoulder o POV — consecuencia personal, punto de vista propio\n"
         "  Escena 5: Direct eye contact with camera — pregunta directa, rompe cuarta pared\n"
-        "Protagonista: joven 18-22 anos, streetwear, hoodie oversized, cara expresiva.\n"
+        f"Protagonista de este video: {_protagonist_desc}.\n"
         "Un simbolo psicologico distinto por imagen, coherente con el tema del video:\n"
         "  manos invisibles tirando hilos / espejo con reflejo diferente /\n"
         "  notificaciones flotando / sombra que no coincide / reloj derritiendose /\n"
@@ -1199,11 +1227,11 @@ def log_video_metadata(video_id, script, duration):
         with open(csv_path,"a",newline="",encoding="utf-8") as f:
             w = csv.writer(f)
             if is_new:
-                w.writerow(["fecha","video_id","url","titulo","tema","tema_visual","mood","duracion_s","escenas"])
+                w.writerow(["fecha","video_id","url","titulo","tema","tema_visual","mood","voz","duracion_s","escenas"])
             w.writerow([time.strftime("%Y-%m-%d %H:%M"), video_id or "FALLO",
                         f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
                         script["title"], script.get("_topic",""),
-                        THEME["name"], _chosen_mood, f"{duration:.1f}", len(script.get("scenes",[]))])
+                        THEME["name"], _chosen_mood, VOICE, f"{duration:.1f}", len(script.get("scenes",[]))])
         log.success("Metadata guardada")
     except Exception as e: log.warning(f"Error metadata: {e}")
 

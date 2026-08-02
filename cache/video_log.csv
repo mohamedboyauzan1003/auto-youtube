@@ -1059,3 +1059,4 @@ date,video_id,url,title,topic,first_scene_text,voice,rate,pitch,subtitle_theme,m
 2026-08-02 11:54,FALLO,,Como manipulan tu confianza,como los manipuladores consiguen tu confianza,violet,ethereal,es-ES-AlvaroNeural,10.9,5
 2026-08-02 13:44,FALLO,,Control total,por que algunas personas siempre parecen tener el control,blood_red,tense,es-ES-AlvaroNeural,11.4,5
 2026-08-02 14:19,FALLO,, Detection de manipulacion,como detectar cuando alguien te usa emocionalmente,gold,ethereal,es-AR-TomasNeural,11.0,5
+2026-08-02 15:18,FALLO,,Control total,por que algunas personas siempre parecen tener el control,toxic_green,tense,es-MX-DaliaNeural,11.3,5
